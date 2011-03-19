@@ -68,6 +68,8 @@ trait Formats { self: Formats =>
   def ++ (newSerializers: Traversable[Serializer[_]]): Formats = 
     newSerializers.foldLeft(this)(_ + _)
 
+  def + (newSerializer: FieldSerializer[_]): Formats = error("implement")
+
   def customSerializer(implicit format: Formats) = 
     customSerializers.foldLeft(Map(): PartialFunction[Any, JValue]) { (acc, x) => 
       acc.orElse(x.serialize) 
