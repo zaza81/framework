@@ -30,33 +30,36 @@ object FieldSerializerExamples extends Specification {
   "All fields are serialized by default" in {
     implicit val formats = DefaultFormats + FieldSerializer[WildDog]()
     val ser = swrite(dog)
-    ser mustEqual """{"color":"black","name":"pluto","owner":{"name":"joe","age":35}}"""
     val dog2 = read[WildDog](ser) 
     dog2.name mustEqual dog.name
     dog2.color mustEqual dog.color
     dog2.owner mustEqual dog.owner
+//    dog2.size mustEqual dog.size
   }
 
   "Fields can be ignored and renamed" in {
     val dogSerializer = FieldSerializer[WildDog](
-      rename("name", "animalname") andThen ignore("owner"),
-      rename("animalname", "name")
+      renameTo("name", "animalname") orElse ignore("owner"),
+      renameFrom("animalname", "name")
     )
 
     implicit val formats = DefaultFormats + dogSerializer
 
     val ser = swrite(dog)
-    ser mustEqual """{"color":"black","animalname":"pluto"}"""
     val dog2 = read[WildDog](ser) 
     dog2.name mustEqual dog.name
     dog2.color mustEqual dog.color
-    dog2.owner mustEqual null
+    dog2.owner must beNull
+//    dog2.size mustEqual dog.size
+//    val size = parse(ser) \ "animalname"
+//    size mustEqual JArray(List(JInt(10), JInt(15)))
   }
 }
 
 abstract class Mammal {
   var name: String = ""
   var owner: Owner = null
+//  val size = List(10, 15)
 }
 
 class WildDog(val color: String) extends Mammal {

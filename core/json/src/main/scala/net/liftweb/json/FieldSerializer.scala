@@ -17,17 +17,22 @@
 package net.liftweb
 package json
 
-case class FieldSerializer[A](
-  serializer:   PartialFunction[JField, JField] = Map(),
+case class FieldSerializer[A: Manifest](
+  // FIXME Option[(String, Any)] -> JField?
+  serializer:   PartialFunction[(String, Any), Option[(String, Any)]] = Map(),
   deserializer: PartialFunction[JField, JField] = Map()
 )
  
 object FieldSerializer {
-  def rename(name: String, newName: String): PartialFunction[JField, JField] = {
+  def renameFrom(name: String, newName: String): PartialFunction[JField, JField] = {
     case JField(`name`, x) => JField(newName, x)
   }
 
-  def ignore(name: String): PartialFunction[JField, JField] = {
-    case JField(`name`, _) => JField(name, JNothing)
+  def ignore(name: String): PartialFunction[(String, Any), Option[(String, Any)]] = {
+    case (`name`, _) => None
+  }
+
+  def renameTo(name: String, newName: String): PartialFunction[(String, Any), Option[(String, Any)]] = {
+    case (`name`, x) => Some(newName, x)
   }
 }

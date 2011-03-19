@@ -29,6 +29,7 @@ trait Formats { self: Formats =>
   val dateFormat: DateFormat
   val typeHints: TypeHints = NoTypeHints
   val customSerializers: List[Serializer[_]] = Nil
+  val fieldSerializers: Map[Class[_], FieldSerializer[_]] = Map()
 
   /**
    * The name of the field in JSON where type hints are added (jsonClass by default)
@@ -49,6 +50,7 @@ trait Formats { self: Formats =>
     override val parameterNameReader = self.parameterNameReader
     override val typeHints = self.typeHints + extraHints
     override val customSerializers = self.customSerializers
+    override val fieldSerializers = self.fieldSerializers
   }
 
   /**
@@ -60,6 +62,7 @@ trait Formats { self: Formats =>
     override val parameterNameReader = self.parameterNameReader
     override val typeHints = self.typeHints
     override val customSerializers = newSerializer :: self.customSerializers
+    override val fieldSerializers = self.fieldSerializers
   }
 
   /**
@@ -68,7 +71,17 @@ trait Formats { self: Formats =>
   def ++ (newSerializers: Traversable[Serializer[_]]): Formats = 
     newSerializers.foldLeft(this)(_ + _)
 
-  def + (newSerializer: FieldSerializer[_]): Formats = error("implement")
+  def + [A](newSerializer: FieldSerializer[A])(implicit mf: Manifest[A]): Formats = new Formats {
+    val dateFormat = Formats.this.dateFormat
+    override val typeHintFieldName = self.typeHintFieldName
+    override val parameterNameReader = self.parameterNameReader
+    override val typeHints = self.typeHints
+    override val customSerializers = self.customSerializers
+    override val fieldSerializers = self.fieldSerializers.updated(mf.erasure, newSerializer)
+  }
+
+  private[json] def fieldSerializer(clazz: Class[_]): Option[FieldSerializer[_]] = 
+    fieldSerializers.get(clazz)
 
   def customSerializer(implicit format: Formats) = 
     customSerializers.foldLeft(Map(): PartialFunction[Any, JValue]) { (acc, x) => 
