@@ -203,15 +203,20 @@ object Extraction {
         }
       }
 
-      def setFields(a: AnyRef, json: JValue) = json match {
+      def setFields(a: AnyRef, json: JValue, constructor: JConstructor[_]) = json match {
         case o: JObject =>
           formats.fieldSerializer(a.getClass).map { serializer =>
+            val constructorArgNames = 
+              Reflection.constructorArgs(constructor, formats.parameterNameReader).map(_._1).toSet
             val jsonFields = o.obj.map { f => 
               val JField(n, v) = (serializer.deserializer orElse Map(f -> f))(f)
               (n, (n, v))
             }.toMap
 
-            Reflection.fields(a.getClass).foreach { case (name, typeInfo) =>
+            val fieldsToSet = 
+              Reflection.fields(a.getClass).filterNot(f => constructorArgNames.contains(f._1))
+
+            fieldsToSet.foreach { case (name, typeInfo) =>
               jsonFields.get(name).foreach { case (n, v) =>
                 val value = extract(v, typeInfo)
                 Reflection.setField(a, n, value)
@@ -231,7 +236,7 @@ object Extraction {
             fail("No information known about type")
 
           val instance = jconstructor.newInstance(args.map(_.asInstanceOf[AnyRef]).toArray: _*)
-          setFields(instance.asInstanceOf[AnyRef], json)
+          setFields(instance.asInstanceOf[AnyRef], json, jconstructor)
         } catch {
           case e @ (_:IllegalArgumentException | _:InstantiationException) =>
             fail("Parsed JSON values do not match with class constructor\nargs=" + 
