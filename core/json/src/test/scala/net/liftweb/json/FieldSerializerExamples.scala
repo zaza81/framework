@@ -34,7 +34,7 @@ object FieldSerializerExamples extends Specification {
     dog2.name mustEqual dog.name
     dog2.color mustEqual dog.color
     dog2.owner mustEqual dog.owner
-//    dog2.size mustEqual dog.size
+    dog2.size mustEqual dog.size
   }
 
   "Fields can be ignored and renamed" in {
@@ -50,16 +50,15 @@ object FieldSerializerExamples extends Specification {
     dog2.name mustEqual dog.name
     dog2.color mustEqual dog.color
     dog2.owner must beNull
-//    dog2.size mustEqual dog.size
-//    val size = parse(ser) \ "animalname"
-//    size mustEqual JArray(List(JInt(10), JInt(15)))
+    dog2.size mustEqual dog.size
+    (parse(ser) \ "animalname") mustEqual JString("pluto")
   }
 }
 
 abstract class Mammal {
   var name: String = ""
   var owner: Owner = null
-//  val size = List(10, 15)
+  val size = List(10, 15)
 }
 
 class WildDog(val color: String) extends Mammal {
