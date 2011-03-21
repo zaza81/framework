@@ -71,6 +71,9 @@ trait Formats { self: Formats =>
   def ++ (newSerializers: Traversable[Serializer[_]]): Formats = 
     newSerializers.foldLeft(this)(_ + _)
 
+  /**
+   * Adds a field serializer for a given type to this formats.
+   */
   def + [A](newSerializer: FieldSerializer[A])(implicit mf: Manifest[A]): Formats = new Formats {
     val dateFormat = Formats.this.dateFormat
     override val typeHintFieldName = self.typeHintFieldName
