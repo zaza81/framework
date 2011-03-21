@@ -27,6 +27,9 @@ object FieldSerializerExamples extends Specification {
   dog.name = "pluto"
   dog.owner = Owner("joe", 35)
 
+  val cat = new WildCat(100)
+  cat.name = "tommy"
+
   "All fields are serialized by default" in {
     implicit val formats = DefaultFormats + FieldSerializer[WildDog]()
     val ser = swrite(dog)
@@ -53,6 +56,17 @@ object FieldSerializerExamples extends Specification {
     dog2.size mustEqual dog.size
     (parse(ser) \ "animalname") mustEqual JString("pluto")
   }
+
+  "Selects best matching serializer" in {
+    val dogSerializer = FieldSerializer[WildDog](ignore("name"))
+    implicit val formats = DefaultFormats + FieldSerializer[AnyRef]() + dogSerializer
+
+    val dog2 = read[WildDog](swrite(dog))
+    val cat2 = read[WildCat](swrite(cat))
+
+    dog2.name mustEqual ""
+    cat2.name mustEqual "tommy"
+  }
 }
 
 abstract class Mammal {
@@ -61,7 +75,7 @@ abstract class Mammal {
   val size = List(10, 15)
 }
 
-class WildDog(val color: String) extends Mammal {
-}
+class WildDog(val color: String) extends Mammal
+class WildCat(val cuteness: Int) extends Mammal
 
 case class Owner(name: String, age: Int)
