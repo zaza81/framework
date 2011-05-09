@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+import com.weiglewilczek.bnd4sbt.BNDPlugin
 import java.util.Calendar
 import java.util.jar.Attributes.Name
 import sbt._
@@ -31,7 +32,7 @@ class LiftFrameworkProject(info: ProjectInfo) extends ParentProject(info) with L
   lazy val common      = coreProject("common", slf4j_api, logback, log4j)()
   lazy val actor       = coreProject("actor")(common)
   lazy val json        = coreProject("json", paranamer)()
-// FIXME: Scala 2.9.0.RC1
+// FIXME: Scala 2.9.0.RC3
 //  lazy val json_scalaz = coreProject("json-scalaz", scalaz)(json)
   lazy val json_ext    = coreProject("json-ext", commons_codec, joda_time)(common, json)
   lazy val util        = coreProject("util", joda_time, commons_codec, javamail, log4j, htmlparser)(actor, json)
@@ -52,13 +53,13 @@ class LiftFrameworkProject(info: ProjectInfo) extends ParentProject(info) with L
 //  lazy val jpa            = persistenceProject("jpa", scalajpa, persistence_api)(webkit)
   lazy val jpa            = persistenceProject("jpa", "org.scala-libs" %% "scalajpa" % "1.4-SNAPSHOT", persistence_api)(webkit)
   lazy val mapper         = persistenceProject("mapper", RuntimeScope.h2database, RuntimeScope.derby)(db, proto)
-  lazy val record         = persistenceProject("record")(mapper)
+  lazy val record         = persistenceProject("record")(proto, db) // db to be removed in v 2.5 (ticket 997)
   lazy val ldap           = persistenceProject("ldap", TestScope.apacheds)(mapper)
   lazy val couchdb        = persistenceProject("couchdb", dispatch_http)(record)
-// FIXME: Scala 2.9.0.RC1
-//  lazy val squeryl_record = persistenceProject("squeryl-record", RuntimeScope.h2database, squeryl)(record)
+// FIXME: Scala 2.9.0.RC3
+//  lazy val squeryl_record = persistenceProject("squeryl-record", RuntimeScope.h2database, squeryl)(record, db)
   lazy val mongodb        = persistenceProject("mongodb", mongo_driver)(json_ext)
-  lazy val mongodb_record = persistenceProject("mongodb-record", dispatch_http)(record, mongodb)
+  lazy val mongodb_record = persistenceProject("mongodb-record")(record, mongodb)
 
 
   // Framework apidocs
@@ -94,7 +95,7 @@ class LiftFrameworkProject(info: ProjectInfo) extends ParentProject(info) with L
 
   // Default base
   // ------------
-  class FrameworkProject(info: ProjectInfo, libs: ModuleID*) extends DefaultProject(info) with LiftDefaultProject {
+  class FrameworkProject(info: ProjectInfo, libs: ModuleID*) extends DefaultProject(info) with BNDPlugin with LiftDefaultProject {
 
     override def libraryDependencies = super.libraryDependencies ++ libs
 
@@ -104,10 +105,14 @@ class LiftFrameworkProject(info: ProjectInfo) extends ParentProject(info) with L
     // FIXME: Build fails with -Xcheckinit -Xwarninit
     override def compileOptions = super.compileOptions.toList -- compileOptions("-Xcheckinit", "-Xwarninit").toList
 
+    // OSGi stuff
+    override def bndExportPackage = Seq("net.liftweb.*;version=\"%s\"".format(projectVersion.value))
+    override def bndImportPackage = "net.liftweb.*;version=\"%s\"".format(projectVersion.value) :: super.bndImportPackage.toList
+
     // System properties necessary during test TODO: Figure out how to make this a subdir of persistence/ldap/
     System.setProperty("apacheds.working.dir", (outputPath / "apacheds").absolutePath)
 
-    // FIXME: Scala 2.9.0.RC1
+    // FIXME: Scala 2.9.0.RC3
     override def testOptions =
       ExcludeTests(
         // lift-json tests

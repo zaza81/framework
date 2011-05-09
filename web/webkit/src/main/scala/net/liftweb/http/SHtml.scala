@@ -61,6 +61,15 @@ trait SHtml {
 
     implicit def funcPromote[T](f: T => String): PairStringPromoter[T] =
       new PairStringPromoter[T]{def apply(in: T): String = f(in)}
+
+
+    type EnumerationTypeWorkaround = Enumeration#Value
+    
+    implicit def enumToStrValPromo[EnumerationTypeWorkaround]: SHtml.PairStringPromoter[EnumerationTypeWorkaround] = 
+      new SHtml.PairStringPromoter[EnumerationTypeWorkaround]{
+        def apply(in: EnumerationTypeWorkaround): String =
+          in.toString
+      }    
   }
 
   /**
@@ -264,7 +273,7 @@ trait SHtml {
    * explicitly capture the template
    */
   def memoize(f: => NodeSeq => NodeSeq): MemoizeTransform = {
-    val salt = (new Exception()).getStackTrace().apply(1).toString
+    val salt = (new Exception()).getStackTrace().apply(2).toString
     new MemoizeTransform {
       object latestNodeSeq extends RequestVar[NodeSeq](NodeSeq.Empty) {
         override val __nameSalt = salt
@@ -562,7 +571,7 @@ trait SHtml {
    * @return a text field
    */
   def jsonText(value: String, ignoreBlur: Boolean, json: JsExp => JsCmd, attrs: ElemAttr*): Elem = 
-  (attrs.foldLeft(<input type="text" value={value}/>)(_ % _)) %
+  (attrs.foldLeft(<input type="text" value={value match {case null => "" case s => s}}/>)(_ % _)) %
   ("onkeypress" -> """liftUtils.lift_blurIfReturn(event)""") %
   (if (ignoreBlur) Null else ("onblur" -> (json(JE.JsRaw("this.value")))))
   
@@ -609,7 +618,9 @@ trait SHtml {
   def ajaxText(value: String, ignoreBlur: Boolean, jsFunc: Call, func: String => JsCmd, attrs: ElemAttr*): Elem =
   ajaxText_*(value, ignoreBlur, Full(jsFunc), SFuncHolder(func), attrs: _*)
 
-  private def ajaxText_*(value: String, ignoreBlur: Boolean, jsFunc: Box[Call], func: AFuncHolder, attrs: ElemAttr*): Elem = {
+  private def ajaxText_*(valuePreNull: String, ignoreBlur: Boolean, jsFunc: Box[Call], func: AFuncHolder, attrs: ElemAttr*): Elem = {
+    val value = (Box !! valuePreNull).openOr("")
+    
     val raw = (funcName: String, value: String) => JsRaw("'" + funcName + "=' + encodeURIComponent(" + value + ".value)")
     val key = formFuncName
 
@@ -964,7 +975,7 @@ trait SHtml {
 
 
   def text_*(value: String, ignoreBlur: Boolean, func: AFuncHolder, ajaxTest: Box[String => JsCmd], attrs: ElemAttr*): Elem =
-    makeFormElement("text", func, attrs: _*) % new UnprefixedAttribute("value", Text(value), Null) % (
+    makeFormElement("text", func, attrs: _*) % new UnprefixedAttribute("value", Text(value match {case null => "" case s => s}), Null) % (
       if (ignoreBlur) Null else buildOnBlur(ajaxTest))
 
   def text_*(value: String, func: AFuncHolder, ajaxTest: Box[String => JsCmd], attrs: ElemAttr*): Elem =
@@ -1160,8 +1171,10 @@ trait SHtml {
    * form fields (input, button, textarea, select) and the
    * function is executed when the form containing the field is submitted.
    */
-  def onSubmitImpl(func: AFuncHolder): NodeSeq => NodeSeq =
-    (in: NodeSeq) => {
+  def onSubmitImpl(func: AFuncHolder): NodeSeq => NodeSeq = {
+    val fgSnap = S._formGroup.get
+
+    (in: NodeSeq) => S._formGroup.doWith(fgSnap){
       var radioName: Box[String] = Empty
       var checkBoxName: Box[String] = Empty
       var checkBoxCnt = 0
@@ -1171,7 +1184,11 @@ trait SHtml {
           case Group(g) => runNodes(g)
           // button
           case e: Elem if e.label == "button" => 
-            fmapFunc(func) {dupWithName(e, _)}
+            _formGroup.is match {
+              case Empty => 
+                formGroup(1)(fmapFunc(func) {dupWithName(e, _)})
+              case _ => fmapFunc(func) {dupWithName(e, _)}
+            }
 
           // textarea
           case e: Elem if e.label == "textarea" => 
@@ -1210,6 +1227,14 @@ trait SHtml {
                 }
             }
 
+          // submit
+          case e: Elem if e.label == "input" && e.attribute("type").map(_.text) == Some("submit") => 
+            _formGroup.is match {
+              case Empty => 
+                formGroup(1)(fmapFunc(func) {dupWithName(e, _)})
+              case _ => fmapFunc(func) {dupWithName(e, _)}
+            }
+
           // generic input
           case e: Elem if e.label == "input" => 
             fmapFunc(func) {dupWithName(e, _)}
@@ -1228,6 +1253,7 @@ trait SHtml {
         case _ => ret
       }
     }
+  }
 
   def text(value: String, func: String => Any, attrs: ElemAttr*): Elem =
     text_*(value, SFuncHolder(func), attrs: _*)
@@ -1791,7 +1817,7 @@ trait SHtml {
 
   def textarea_*(value: String, func: AFuncHolder, attrs: ElemAttr*): Elem =
     fmapFunc(func)(funcName =>
-            attrs.foldLeft(<textarea name={funcName}>{value}</textarea>)(_ % _))
+            attrs.foldLeft(<textarea name={funcName}>{value match {case null => "" case s => s}}</textarea>)(_ % _))
 
   def radio(opts: Seq[String], deflt: Box[String], func: String => Any,
             attrs: ElemAttr*): ChoiceHolder[String] =
@@ -1987,9 +2013,9 @@ object AjaxContext {
 
 case class AjaxContext(success: Box[String], failure: Box[String], responseType: AjaxType.Value)
 
-case class JsContext(override val success: Box[String], override val failure: Box[String]) extends AjaxContext(success, failure, AjaxType.JavaScript)
+class JsContext(override val success: Box[String], override val failure: Box[String]) extends AjaxContext(success, failure, AjaxType.JavaScript)
 
-case class JsonContext(override val success: Box[String], override val failure: Box[String]) extends AjaxContext(success, failure, AjaxType.JSON)
+class JsonContext(override val success: Box[String], override val failure: Box[String]) extends AjaxContext(success, failure, AjaxType.JSON)
 
 object Html5ElemAttr {
   /**

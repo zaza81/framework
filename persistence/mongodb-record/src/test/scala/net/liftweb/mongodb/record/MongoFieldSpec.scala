@@ -28,7 +28,8 @@ import org.bson.types.ObjectId
 import org.specs.Specification
 
 import common._
-import json.JsonAST._
+import json.{Num => JsonNum, _}
+import JsonDSL._
 import util.FieldError
 import util.Helpers.randomString
 import http.{LiftSession, S}
@@ -43,14 +44,12 @@ import net.liftweb.record._
 object MongoFieldSpec extends Specification("MongoField Specification") with MongoTestKit {
   import fixtures._
 
-  def passBasicTests[A](example: A, mandatory: MandatoryTypedField[A], legacyOptional: MandatoryTypedField[A])(implicit m: scala.reflect.Manifest[A]): Unit = {
-
-    val canCheckDefaultValues =
-      !mandatory.defaultValue.isInstanceOf[Date] && // don't try to use the default value of date/time typed fields, because it changes from moment to moment!
-      !mandatory.defaultValue.isInstanceOf[ObjectId] && // same with ObjectId
-      !mandatory.defaultValue.isInstanceOf[Pattern] &&
-      !mandatory.defaultValue.isInstanceOf[UUID] &&
-      !mandatory.defaultValue.isInstanceOf[DBRef]
+  def passBasicTests[A](
+    example: A,
+    mandatory: MandatoryTypedField[A],
+    legacyOptional: MandatoryTypedField[A],
+    canCheckDefaultValues: Boolean = true
+  )(implicit m: scala.reflect.Manifest[A]): Unit = {
 
     def commonBehaviorsForAllFlavors(field: MandatoryTypedField[A]) = {
 
@@ -180,7 +179,7 @@ object MongoFieldSpec extends Specification("MongoField Specification") with Mon
     val rec = MongoFieldTypeTestRecord.createRecord
     val now = new Date
     val nowStr = rec.meta.formats.dateFormat.format(now)
-    passBasicTests(now, rec.mandatoryDateField, rec.legacyOptionalDateField)
+    passBasicTests(now, rec.mandatoryDateField, rec.legacyOptionalDateField, false)
     passConversionTests(
       now,
       rec.mandatoryDateField,
@@ -190,25 +189,18 @@ object MongoFieldSpec extends Specification("MongoField Specification") with Mon
     )
   }
 
-  "DBRefField" should {
-    checkMongoIsRunning
-    
-    if (isMongoRunning) { // Even if this gets skipped, the vals still get set.
-      val rec = MongoFieldTypeTestRecord.createRecord
-      val dbref = DBRefTestRecord.createRecord.getRef // This makes a call to MongoDB.use and needs a MongoDB connection.
-      passBasicTests(dbref, rec.mandatoryDBRefField, rec.legacyOptionalDBRefField)
-    }
-  }
-
   "JsonObjectField" should {
     val rec = MongoFieldTypeTestRecord.createRecord
-    val ttjo = TypeTestJsonObject(1, "jsonobj1")
+    val ttjo = TypeTestJsonObject(1, "jsonobj1", Map("x" -> "a"))
+    val json = ("intField" -> 1) ~ ("stringField" -> "jsonobj1") ~ ("mapField" -> (("x" -> "a")))
     passBasicTests(ttjo, rec.mandatoryJsonObjectField, rec.legacyOptionalJsonObjectField)
     passConversionTests(
       ttjo,
       rec.mandatoryJsonObjectField,
-      JsObj(("intField", Num(1)), ("stringField", Str("jsonobj1"))),
-      JObject(List(JField("intField", JInt(1)), JField("stringField", JString("jsonobj1")))),
+      new JsExp {
+        def toJsCmd = Printer.compact(render(json))
+      },
+      json,
       Empty
     )
   }
@@ -216,7 +208,7 @@ object MongoFieldSpec extends Specification("MongoField Specification") with Mon
   "ObjectIdField" should {
     val rec = MongoFieldTypeTestRecord.createRecord
     val oid = ObjectId.get
-    passBasicTests(oid, rec.mandatoryObjectIdField, rec.legacyOptionalObjectIdField)
+    passBasicTests(oid, rec.mandatoryObjectIdField, rec.legacyOptionalObjectIdField, false)
     passConversionTests(
       oid,
       rec.mandatoryObjectIdField,
@@ -229,7 +221,7 @@ object MongoFieldSpec extends Specification("MongoField Specification") with Mon
   "PatternField" should {
     val rec = MongoFieldTypeTestRecord.createRecord
     val ptrn = Pattern.compile("^Mo", Pattern.CASE_INSENSITIVE)
-    passBasicTests(ptrn, rec.mandatoryPatternField, rec.legacyOptionalPatternField)
+    passBasicTests(ptrn, rec.mandatoryPatternField, rec.legacyOptionalPatternField, false)
     passConversionTests(
       ptrn,
       rec.mandatoryPatternField,
@@ -242,7 +234,7 @@ object MongoFieldSpec extends Specification("MongoField Specification") with Mon
   "UUIDField" should {
     val rec = MongoFieldTypeTestRecord.createRecord
     val uuid = UUID.randomUUID
-    passBasicTests(uuid, rec.mandatoryUUIDField, rec.legacyOptionalUUIDField)
+    passBasicTests(uuid, rec.mandatoryUUIDField, rec.legacyOptionalUUIDField, false)
     passConversionTests(
       uuid,
       rec.mandatoryUUIDField,
@@ -305,19 +297,19 @@ object MongoFieldSpec extends Specification("MongoField Specification") with Mon
   "MongoJsonObjectListField" should {
     "function correctly" in {
       val rec = ListTestRecord.createRecord
-      val lst = List(TypeTestJsonObject(1, "jsonobj1"), TypeTestJsonObject(2, "jsonobj2"))
+      val lst = List(TypeTestJsonObject(1, "jsonobj1", Map("x" -> "1")), TypeTestJsonObject(2, "jsonobj2", Map("x" -> "2")))
+      val json = List(
+        ("intField" -> 1) ~ ("stringField" -> "jsonobj1") ~ ("mapField" -> (("x" -> "1"))),
+        ("intField" -> 2) ~ ("stringField" -> "jsonobj2") ~ ("mapField" -> (("x" -> "2")))
+      )
       passBasicTests(lst, rec.mandatoryMongoJsonObjectListField, rec.legacyOptionalMongoJsonObjectListField)
       passConversionTests(
         lst,
         rec.mandatoryMongoJsonObjectListField,
-        JsArray(
-          JsObj(("intField", Num(1)), ("stringField", Str("jsonobj1"))),
-          JsObj(("intField", Num(2)), ("stringField", Str("jsonobj2")))
-        ),
-        JArray(List(
-          JObject(List(JField("intField", JInt(1)), JField("stringField", JString("jsonobj1")))),
-          JObject(List(JField("intField", JInt(2)), JField("stringField", JString("jsonobj2"))))
-        )),
+        new JsExp {
+          def toJsCmd = Printer.compact(render(json))
+        },
+        json,
         Empty
       )
     }
@@ -365,6 +357,106 @@ object MongoFieldSpec extends Specification("MongoField Specification") with Mon
           JField("b", JInt(5)),
           JField("c", JInt(6))
         )),
+        Empty
+      )
+    }
+  }
+
+  "BsonRecordField" should {
+    "function correctly" in {
+      val rec = SubRecordTestRecord.createRecord
+      val subRec = SubRecord.createRecord.name("subrecord")
+
+      val srJson =
+        JObject(List(
+          JField("name", JString("subrecord")),
+          JField("subsub", JObject(List(
+            JField("name", JString(""))
+          ))),
+          JField("subsublist", JArray(List())),
+          JField("when", JObject(List(
+            JField("$dt", JString(rec.meta.formats.dateFormat.format(subRec.when.value)))
+          ))),
+          JField("slist", JArray(List())),
+          JField("smap", JObject(List())),
+          JField("oid", JObject(List(JField("$oid", JString(subRec.oid.value.toString))))),
+          JField("pattern", JObject(List(
+            JField("$regex", JString(subRec.pattern.value.pattern)),
+            JField("$flags", JInt(subRec.pattern.value.flags))
+          ))),
+          JField("uuid", JObject(List(JField("$uuid", JString(subRec.uuid.value.toString)))))
+        ))
+
+      val srJsExp = new JsExp {
+        def toJsCmd = Printer.compact(render(srJson))
+      }
+
+      passBasicTests(subRec, rec.mandatoryBsonRecordField, rec.legacyOptionalBsonRecordField, false)
+      passConversionTests(
+        subRec,
+        rec.mandatoryBsonRecordField,
+        srJsExp,
+        srJson,
+        Empty
+      )
+    }
+  }
+
+  "BsonRecordListField" should {
+    "function correctly" in {
+      val rec = SubRecordTestRecord.createRecord
+      val lst = List(SubRecord.createRecord.name("subrec1"), SubRecord.createRecord.name("subrec2"))
+      val sr1Json =
+        JObject(List(
+          JField("name", JString("subrec1")),
+          JField("subsub", JObject(List(
+            JField("name", JString(""))
+          ))),
+          JField("subsublist", JArray(List())),
+          JField("when", JObject(List(
+            JField("$dt", JString(rec.meta.formats.dateFormat.format(lst(0).when.value)))
+          ))),
+          JField("slist", JArray(List())),
+          JField("smap", JObject(List())),
+          JField("oid", JObject(List(JField("$oid", JString(lst(0).oid.value.toString))))),
+          JField("pattern", JObject(List(
+            JField("$regex", JString(lst(0).pattern.value.pattern)),
+            JField("$flags", JInt(lst(0).pattern.value.flags))
+          ))),
+          JField("uuid", JObject(List(JField("$uuid", JString(lst(0).uuid.value.toString)))))
+        ))
+      val sr2Json =
+        JObject(List(
+          JField("name", JString("subrec2")),
+          JField("subsub", JObject(List(
+            JField("name", JString(""))
+          ))),
+          JField("subsublist", JArray(List())),
+          JField("when", JObject(List(
+            JField("$dt", JString(rec.meta.formats.dateFormat.format(lst(1).when.value)))
+          ))),
+          JField("slist", JArray(List())),
+          JField("smap", JObject(List())),
+          JField("oid", JObject(List(JField("$oid", JString(lst(1).oid.value.toString))))),
+          JField("pattern", JObject(List(
+            JField("$regex", JString(lst(1).pattern.value.pattern)),
+            JField("$flags", JInt(lst(1).pattern.value.flags))
+          ))),
+          JField("uuid", JObject(List(JField("$uuid", JString(lst(1).uuid.value.toString)))))
+        ))
+      val sr1JsExp = new JsExp {
+        def toJsCmd = compact(render(sr1Json))
+      }
+      val sr2JsExp = new JsExp {
+        def toJsCmd = compact(render(sr2Json))
+      }
+
+      passBasicTests(lst, rec.mandatoryBsonRecordListField, rec.legacyOptionalBsonRecordListField)
+      passConversionTests(
+        lst,
+        rec.mandatoryBsonRecordListField,
+        JsArray(sr1JsExp, sr2JsExp),
+        JArray(List(sr1Json, sr2Json)),
         Empty
       )
     }

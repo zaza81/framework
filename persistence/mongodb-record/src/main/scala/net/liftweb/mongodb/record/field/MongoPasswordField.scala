@@ -24,8 +24,7 @@ import scala.xml.{Node, NodeSeq, Text}
 import net.liftweb.common.{Box, Empty, Failure, Full}
 import net.liftweb.http.S
 import net.liftweb.http.js.JE._
-import net.liftweb.mapper.Safe
-import net.liftweb.util.{FatLazy, FieldError, Helpers}
+import net.liftweb.util.{FatLazy, FieldError, Helpers, Safe}
 
 import Helpers._
 
@@ -43,7 +42,7 @@ object MongoPasswordField {
   def encrypt(s: String, salt: String) = hash("{"+s+"} salt={" + salt + "}")
 }
 
-class MongoPasswordField[OwnerType <: MongoRecord[OwnerType]](rec: OwnerType, minLen: Int) extends JsonObjectField[OwnerType, Password](rec, Password) {
+class MongoPasswordField[OwnerType <: BsonRecord[OwnerType]](rec: OwnerType, minLen: Int) extends JsonObjectField[OwnerType, Password](rec, Password) {
 
   def this(rec: OwnerType) = {
     this(rec, 3)

@@ -14,10 +14,10 @@
  * limitations under the License.
  */
 
-package net.liftweb 
-package mongodb 
-package record 
-package fixtures 
+package net.liftweb
+package mongodb
+package record
+package fixtures
 
 import field._
 
@@ -38,6 +38,8 @@ object MyTestEnum extends Enumeration {
 }
 
 trait HarnessedLifecycleCallbacks extends LifecycleCallbacks {
+  this: BaseField =>
+
   var beforeValidationHarness: () => Unit = () => ()
   override def beforeValidation = beforeValidationHarness()
   var afterValidationHarness: () => Unit = () => ()
@@ -63,7 +65,7 @@ trait HarnessedLifecycleCallbacks extends LifecycleCallbacks {
   override def afterDelete = afterDeleteHarness()
 }
 
-class FieldTypeTestRecord private () extends MongoRecord[FieldTypeTestRecord] with MongoId[FieldTypeTestRecord] {
+class FieldTypeTestRecord private () extends MongoRecord[FieldTypeTestRecord] with ObjectIdPk[FieldTypeTestRecord] {
   def meta = FieldTypeTestRecord
 
   object mandatoryBinaryField extends BinaryField(this)
@@ -131,7 +133,8 @@ class FieldTypeTestRecord private () extends MongoRecord[FieldTypeTestRecord] wi
   object optionalTimeZoneField extends OptionalTimeZoneField(this)
 
   override def equals(other: Any): Boolean = other match {
-    case that:FieldTypeTestRecord =>
+    case that: FieldTypeTestRecord =>
+      this.id.value == that.id.value &&
       //this.mandatoryBinaryField.value == that.mandatoryBinaryField.value &&
       this.mandatoryBooleanField.value == that.mandatoryBooleanField.value &&
       this.mandatoryCountryField.value == that.mandatoryCountryField.value &&
@@ -157,7 +160,8 @@ object FieldTypeTestRecord extends FieldTypeTestRecord with MongoMetaRecord[Fiel
 
 case class TypeTestJsonObject(
   intField: Int,
-  stringField: String
+  stringField: String,
+  mapField: Map[String, String]
 ) extends JsonObject[TypeTestJsonObject]
 {
   // TODO: Add more types
@@ -170,21 +174,18 @@ class DBRefTestRecord private () extends MongoRecord[DBRefTestRecord] with Mongo
 }
 object DBRefTestRecord extends DBRefTestRecord with MongoMetaRecord[DBRefTestRecord]
 
-class MongoFieldTypeTestRecord private () extends MongoRecord[MongoFieldTypeTestRecord] with MongoId[MongoFieldTypeTestRecord] {
+class MongoFieldTypeTestRecord private () extends MongoRecord[MongoFieldTypeTestRecord] with ObjectIdPk[MongoFieldTypeTestRecord] {
   def meta = MongoFieldTypeTestRecord
 
   object mandatoryDateField extends DateField(this)
   object legacyOptionalDateField extends DateField(this) { override def optional_? = true }
 
-  object mandatoryDBRefField extends DBRefField[MongoFieldTypeTestRecord, DBRefTestRecord](this, DBRefTestRecord)
-  object legacyOptionalDBRefField extends DBRefField[MongoFieldTypeTestRecord, DBRefTestRecord](this, DBRefTestRecord) { override def optional_? = true }
-
   object mandatoryJsonObjectField extends JsonObjectField(this, TypeTestJsonObject) {
-    def defaultValue = TypeTestJsonObject(0, "")
+    def defaultValue = TypeTestJsonObject(0, "", Map[String, String]())
   }
   object legacyOptionalJsonObjectField extends JsonObjectField(this, TypeTestJsonObject) {
     override def optional_? = true
-    def defaultValue = TypeTestJsonObject(0, "")
+    def defaultValue = TypeTestJsonObject(0, "", Map[String, String]())
   }
 
   object mandatoryObjectIdField extends ObjectIdField(this)
@@ -197,10 +198,9 @@ class MongoFieldTypeTestRecord private () extends MongoRecord[MongoFieldTypeTest
   object legacyOptionalUUIDField extends UUIDField(this) { override def optional_? = true }
 
   override def equals(other: Any): Boolean = other match {
-    case that:MongoFieldTypeTestRecord =>
+    case that: MongoFieldTypeTestRecord =>
+      this.id.value == that.id.value &&
       this.mandatoryDateField.value == that.mandatoryDateField.value &&
-      //this.mandatoryDBRefField.value.getId == that.mandatoryDBRefField.value.getId &&
-      //this.mandatoryDBRefField.value.getRef == that.mandatoryDBRefField.value.getRef &&
       this.mandatoryJsonObjectField.value == that.mandatoryJsonObjectField.value &&
       this.mandatoryObjectIdField.value == that.mandatoryObjectIdField.value &&
       this.mandatoryPatternField.value.pattern == that.mandatoryPatternField.value.pattern &&
@@ -214,14 +214,14 @@ object MongoFieldTypeTestRecord extends MongoFieldTypeTestRecord with MongoMetaR
   override def formats = allFormats
 }
 
-class PasswordTestRecord private () extends MongoRecord[PasswordTestRecord] with MongoId[PasswordTestRecord] {
+class PasswordTestRecord private () extends MongoRecord[PasswordTestRecord] with ObjectIdPk[PasswordTestRecord] {
   def meta = PasswordTestRecord
 
   object password extends MongoPasswordField(this, 3)
 }
 object PasswordTestRecord extends PasswordTestRecord with MongoMetaRecord[PasswordTestRecord]
 
-class ListTestRecord private () extends MongoRecord[ListTestRecord] with MongoId[ListTestRecord] {
+class ListTestRecord private () extends MongoRecord[ListTestRecord] with UUIDPk[ListTestRecord] {
   def meta = ListTestRecord
 
   object mandatoryStringListField extends MongoListField[ListTestRecord, String](this)
@@ -238,7 +238,8 @@ class ListTestRecord private () extends MongoRecord[ListTestRecord] with MongoId
   // TODO: More List types
 
   override def equals(other: Any): Boolean = other match {
-    case that:ListTestRecord =>
+    case that: ListTestRecord =>
+      this.id.value == that.id.value &&
       this.mandatoryStringListField.value == that.mandatoryStringListField.value &&
       this.mandatoryIntListField.value == that.mandatoryIntListField.value &&
       this.mandatoryMongoJsonObjectListField.value == that.mandatoryMongoJsonObjectListField.value
@@ -249,7 +250,7 @@ object ListTestRecord extends ListTestRecord with MongoMetaRecord[ListTestRecord
   override def formats = allFormats
 }
 
-class MapTestRecord extends MongoRecord[MapTestRecord] with MongoId[MapTestRecord] {
+class MapTestRecord private () extends MongoRecord[MapTestRecord] with StringPk[MapTestRecord] {
   def meta = MapTestRecord
 
   object mandatoryStringMapField extends MongoMapField[MapTestRecord, String](this)
@@ -261,7 +262,8 @@ class MapTestRecord extends MongoRecord[MapTestRecord] with MongoId[MapTestRecor
   // TODO: More Map types, including JsonObject (will require a new Field type)
 
   override def equals(other: Any): Boolean = other match {
-    case that:MapTestRecord =>
+    case that: MapTestRecord =>
+      this.id.value == that.id.value &&
       this.mandatoryStringMapField.value == that.mandatoryStringMapField.value &&
       this.mandatoryIntMapField.value == that.mandatoryIntMapField.value
     case _ => false
@@ -274,34 +276,35 @@ object MapTestRecord extends MapTestRecord with MongoMetaRecord[MapTestRecord] {
 class LifecycleTestRecord private ()
   extends MongoRecord[LifecycleTestRecord]
   with MongoId[LifecycleTestRecord]
-  with HarnessedLifecycleCallbacks
 {
   def meta = LifecycleTestRecord
 
   def foreachCallback(f: LifecycleCallbacks => Any): Unit =
     meta.foreachCallback(this, f)
 
-  object innerObjectWithCallbacks extends LifecycleCallbacks with HarnessedLifecycleCallbacks
-
-  object stringFieldWithCallbacks extends StringField(this, 100) with LifecycleCallbacks with HarnessedLifecycleCallbacks
+  object stringFieldWithCallbacks extends StringField(this, 100) with HarnessedLifecycleCallbacks
 }
 
-object LifecycleTestRecord extends LifecycleTestRecord with MongoMetaRecord[LifecycleTestRecord] {
-  // without this, the Scala 2.7 compiler panics, so don't blame me if you remove it and it's confusing!
-  override def foreachCallback(inst: LifecycleTestRecord, f: LifecycleCallbacks => Any) = super.foreachCallback(inst, f)
-}
+object LifecycleTestRecord extends LifecycleTestRecord with MongoMetaRecord[LifecycleTestRecord]
 
 /*
  * SubRecord fields
  */
-class SubRecord extends BsonRecord[SubRecord] {
+class SubRecord private () extends BsonRecord[SubRecord] {
   def meta = SubRecord
 
   object name extends StringField(this, 12)
+  object subsub extends BsonRecordField(this, SubSubRecord)
+  object subsublist extends BsonRecordListField(this, SubSubRecord)
+  object when extends DateField(this)
+  object slist extends MongoListField[SubRecord, String](this)
+  object smap extends MongoMapField[SubRecord, String](this)
+  object oid extends ObjectIdField(this)
+  object pattern extends PatternField(this)
+  object uuid extends UUIDField(this)
 
   override def equals(other: Any): Boolean = other match {
-    case that:SubRecord =>
-      this.name.value == that.name.value
+    case that: SubRecord => this.toString == that.toString
     case _ => false
   }
 }
@@ -309,7 +312,22 @@ object SubRecord extends SubRecord with BsonMetaRecord[SubRecord] {
   override def formats = allFormats
 }
 
-class SubRecordTestRecord extends MongoRecord[SubRecordTestRecord] with MongoId[SubRecordTestRecord] {
+class SubSubRecord private () extends BsonRecord[SubSubRecord] {
+  def meta = SubSubRecord
+
+  object name extends StringField(this, 12)
+
+  override def equals(other: Any): Boolean = other match {
+    case that: SubSubRecord =>
+      this.name.value == that.name.value
+    case _ => false
+  }
+}
+object SubSubRecord extends SubSubRecord with BsonMetaRecord[SubSubRecord] {
+  override def formats = allFormats
+}
+
+class SubRecordTestRecord private () extends MongoRecord[SubRecordTestRecord] with ObjectIdPk[SubRecordTestRecord] {
   def meta = SubRecordTestRecord
 
   object mandatoryBsonRecordField extends BsonRecordField(this, SubRecord)
@@ -323,12 +341,7 @@ class SubRecordTestRecord extends MongoRecord[SubRecordTestRecord] with MongoId[
   }
 
   override def equals(other: Any): Boolean = other match {
-    case that:SubRecordTestRecord =>
-      this.id == that.id &&
-      this.mandatoryBsonRecordField.value == that.mandatoryBsonRecordField.value &&
-      this.legacyOptionalBsonRecordField.valueBox == that.legacyOptionalBsonRecordField.valueBox &&
-      this.mandatoryBsonRecordListField.value == that.mandatoryBsonRecordListField.value &&
-      this.legacyOptionalBsonRecordListField.valueBox == that.legacyOptionalBsonRecordListField.valueBox
+    case that: SubRecordTestRecord => this.toString == that.toString
     case _ => false
   }
 
@@ -342,7 +355,7 @@ case class JsonObj(id: String, name: String) extends JsonObject[JsonObj] {
 }
 object JsonObj extends JsonObjectMeta[JsonObj]
 
-class NullTestRecord extends MongoRecord[NullTestRecord] with MongoId[NullTestRecord] {
+class NullTestRecord private () extends MongoRecord[NullTestRecord] with IntPk[NullTestRecord] {
 
   def meta = NullTestRecord
 
@@ -354,6 +367,11 @@ class NullTestRecord extends MongoRecord[NullTestRecord] with MongoId[NullTestRe
     def defaultValue = JsonObj("1", null)
   }
   object jsonobjlist extends MongoJsonObjectListField[NullTestRecord, JsonObj](this, JsonObj)
+
+  override def equals(other: Any): Boolean = other match {
+    case that: NullTestRecord => this.toString == that.toString
+    case _ => false
+  }
 }
 
 object NullTestRecord extends NullTestRecord with MongoMetaRecord[NullTestRecord]
@@ -364,15 +382,36 @@ extends JsonObject[BoxTestJsonObj] {
 }
 object BoxTestJsonObj extends JsonObjectMeta[BoxTestJsonObj]
 
-class BoxTestRecord extends MongoRecord[BoxTestRecord] with MongoId[BoxTestRecord] {
+class BoxTestRecord private () extends MongoRecord[BoxTestRecord] with LongPk[BoxTestRecord] {
   def meta = BoxTestRecord
 
   object jsonobj extends JsonObjectField[BoxTestRecord, BoxTestJsonObj](this, BoxTestJsonObj) {
     def defaultValue = BoxTestJsonObj("0", Empty, Full("Full String"), Failure("Failure"))
   }
   object jsonobjlist extends MongoJsonObjectListField[BoxTestRecord, BoxTestJsonObj](this, BoxTestJsonObj)
+
+  override def equals(other: Any): Boolean = other match {
+    case that: BoxTestRecord => this.toString == that.toString
+    case _ => false
+  }
 }
 object BoxTestRecord extends BoxTestRecord with MongoMetaRecord[BoxTestRecord] {
   override def formats = super.formats + new JsonBoxSerializer
 }
 
+/*
+ * MongoRefFields
+ */
+class RefFieldTestRecord private () extends MongoRecord[RefFieldTestRecord] with ObjectIdPk[RefFieldTestRecord] {
+  def meta = RefFieldTestRecord
+
+  object mandatoryObjectIdRefField extends ObjectIdRefField(this, FieldTypeTestRecord)
+  object mandatoryUUIDRefField extends UUIDRefField(this, ListTestRecord)
+  object mandatoryStringRefField extends StringRefField(this, MapTestRecord, 100)
+  object mandatoryIntRefField extends IntRefField(this, NullTestRecord)
+  object mandatoryLongRefField extends LongRefField(this, BoxTestRecord)
+}
+
+object RefFieldTestRecord extends RefFieldTestRecord with MongoMetaRecord[RefFieldTestRecord] {
+  override def formats = allFormats
+}

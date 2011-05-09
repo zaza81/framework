@@ -501,7 +501,7 @@ trait S extends HasParams with Loggable {
   def templateFromTemplateAttr: Box[NodeSeq] =
     for (templateName <- attr("template") ?~ "Template Attribute missing";
          val tmplList = templateName.roboSplit("/");
-         template <- TemplateFinder.findAnyTemplate(tmplList) ?~
+         template <- Templates(tmplList) ?~
                  "couldn't find template") yield template
 
 
@@ -1084,7 +1084,7 @@ for {
    * @see ResponseShortcutException
    * @see # redirectTo ( String, ( ) => Unit)
    */
-  def redirectTo[T](where: String): T = throw ResponseShortcutException.redirect(where)
+  def redirectTo(where: String): Nothing = throw ResponseShortcutException.redirect(where)
 
   /**
    * Redirects the browser to a given URL and registers a function that will be executed when the browser
@@ -1097,7 +1097,7 @@ for {
    *
    * @see # redirectTo ( String )
    */
-  def redirectTo[T](where: String, func: () => Unit): T =
+  def redirectTo(where: String, func: () => Unit): Nothing =
     throw ResponseShortcutException.redirect(where, func)
 
 
@@ -1834,18 +1834,18 @@ for {
   /**
    * Find and process a template. This can be used to load a template from within some other Lift processing,
    * such as a snippet or view. If you just want to retrieve the XML contents of a template, use
-   * TemplateFinder.findAnyTemplate.
+   * Templates.apply.
    *
    * @param path The path for the template that you want to process
    * @param snips any snippet mapping specific to this template run
    * @return a Full Box containing the processed template, or a Failure if the template could not be found.
    *
-   * @see TempalateFinder # findAnyTemplate
+   * @see TempalateFinder # apply
    */
   def runTemplate(path: List[String], snips: (String,  NodeSeq => NodeSeq)*): Box[NodeSeq] =
     mapSnippetsWith(snips :_*) {
       for{
-        t <- TemplateFinder.findAnyTemplate(path) ?~ ("Couldn't find template " + path)
+        t <- Templates(path) ?~ ("Couldn't find template " + path)
         sess <- session ?~ "No current session"
       } yield sess.processSurroundAndInclude(path.mkString("/", "/", ""), t)
     }
@@ -2399,7 +2399,7 @@ for {
     }
 
   def formFuncName: String = if (Props.testMode && !disableTestFuncNames_?) {
-    val bump: Long = ((_formGroup.is openOr 0) + 1000L) * 10000L
+    val bump: Long = ((_formGroup.is openOr 0) + 1000L) * 100000L
     val num: Int = formItemNumber.is
     formItemNumber.set(num + 1)
     import java.text._
@@ -2408,7 +2408,7 @@ for {
     "f" + prefix + "_" + Helpers.hashHex((new Exception).getStackTrace.toList.filter(notLiftOrScala).take(2).map(_.toString).mkString(","))
   } else {
     _formGroup.is match {
-      case Full(x) => Helpers.nextFuncName(x.toLong * 10000L)
+      case Full(x) => Helpers.nextFuncName(x.toLong * 100000L)
       case _ => Helpers.nextFuncName
     }
   }

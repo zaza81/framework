@@ -53,21 +53,24 @@ private[json] object Meta {
   case class Dict(mapping: Mapping) extends Mapping
   case class Col(targetType: Class[_], mapping: Mapping) extends Mapping
   case class Constructor(targetType: TypeInfo, choices: List[DeclaredConstructor]) extends Mapping {
-    def bestMatching(argNames: List[String]): DeclaredConstructor = {
+    def bestMatching(argNames: List[String]): Option[DeclaredConstructor] = {
       val names = Set(argNames: _*)
       def countOptionals(args: List[Arg]) =
         args.foldLeft(0)((n, x) => if (x.optional) n+1 else n)
       def score(args: List[Arg]) =
         args.foldLeft(0)((s, arg) => if (names.contains(arg.path)) s+1 else -100)
 
-      val best = choices.tail.foldLeft((choices.head, score(choices.head.args))) { (best, c) =>
-        val newScore = score(c.args)
-        if (newScore == best._2) {
-          if (countOptionals(c.args) < countOptionals(best._1.args))
-            (c, newScore) else best
-        } else if (newScore > best._2) (c, newScore) else best
+      if (choices.isEmpty) None
+      else {
+        val best = choices.tail.foldLeft((choices.head, score(choices.head.args))) { (best, c) =>
+          val newScore = score(c.args)
+          if (newScore == best._2) {
+            if (countOptionals(c.args) < countOptionals(best._1.args))
+              (c, newScore) else best
+          } else if (newScore > best._2) (c, newScore) else best
+        }
+        Some(best._1)
       }
-      best._1
     }
   }
 
@@ -82,7 +85,8 @@ private[json] object Meta {
       paranamer.lookupParameterNames(constructor)
   }
 
-  private[json] def mappingOf(clazz: Class[_])(implicit formats: Formats): Mapping = {
+  private[json] def mappingOf(clazz: Class[_], typeArgs: Seq[Class[_]] = Seq())
+                             (implicit formats: Formats): Mapping = {
     import Reflection._
 
     def constructors(clazz: Class[_], visited: Set[Class[_]]) =
@@ -105,8 +109,6 @@ private[json] object Meta {
 
       def fieldMapping(fType: Class[_], genType: Type): (Mapping, Boolean) = {
         if (primitive_?(fType)) (Value(fType), false)
-        else if (classOf[List[_]].isAssignableFrom(fType))
-          (mkContainer(genType, `* -> *`, 0, Col.apply(classOf[List[_]], _)), false)
         else if (classOf[Set[_]].isAssignableFrom(fType))
           (mkContainer(genType, `* -> *`, 0, Col.apply(classOf[Set[_]], _)), false)
         else if (fType.isArray)
@@ -115,6 +117,8 @@ private[json] object Meta {
           (mkContainer(genType, `* -> *`, 0, identity _), true)
         else if (classOf[Map[_, _]].isAssignableFrom(fType))
           (mkContainer(genType, `(*,*) -> *`, 1, Dict.apply _), false)
+        else if (classOf[Seq[_]].isAssignableFrom(fType))
+          (mkContainer(genType, `* -> *`, 0, Col.apply(classOf[List[_]], _)), false)
         else {
           if (visited.contains(fType)) (Cycle(fType), false)
           else (Constructor(TypeInfo(fType, parameterizedTypeOpt(genType)),
@@ -127,8 +131,22 @@ private[json] object Meta {
     }
 
     if (primitive_?(clazz)) Value(clazz)
-    else mappings.memoize(clazz, c => Constructor(TypeInfo(c, None), constructors(c, Set())))
+    else {
+      mappings.memoize(clazz, c => {
+        val typeInfo = 
+          if (typeArgs.isEmpty) TypeInfo(c, None) 
+          else TypeInfo(c, Some(mkParameterizedType(c, typeArgs)))
+        Constructor(typeInfo, constructors(c, Set())) 
+      })
+    }
   }
+
+  private[json] def mkParameterizedType(owner: Class[_], typeArgs: Seq[Class[_]]) = 
+    new ParameterizedType {
+      def getActualTypeArguments = typeArgs.toArray
+      def getOwnerType = owner
+      def getRawType = owner
+    }
 
   private[json] def unmangleName(name: String) =
     unmangledNames.memoize(name, operators.foldLeft(_)((n, o) => n.replace(o._1, o._2)))
@@ -253,7 +271,7 @@ private[json] object Meta {
 
     def fields(clazz: Class[_]): List[(String, TypeInfo)] = {
       val fs = clazz.getDeclaredFields.toList
-        .filterNot(f => Modifier.isStatic(f.getModifiers))
+        .filterNot(f => Modifier.isStatic(f.getModifiers) || Modifier.isTransient(f.getModifiers))
         .map(f => (f.getName, TypeInfo(f.getType, f.getGenericType match {
           case p: ParameterizedType => Some(p)
           case _ => None

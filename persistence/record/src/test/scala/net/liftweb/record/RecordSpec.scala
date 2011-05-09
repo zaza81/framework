@@ -55,6 +55,11 @@ object RecordSpec extends Specification("Record Specification") {
         rec.fieldByName("x" + name + "y") must not(verify(_.isDefined))
       }
     }
+
+    "ignore synthetic methods" in {
+      SyntheticTestRecord.metaFields.size must_== 1
+    }
+
   }
 
   "Record lifecycle callbacks" should {
@@ -151,8 +156,6 @@ object RecordSpec extends Specification("Record Specification") {
       }
     }
 
-    testOneHarness("the record level", rec => rec)
-    testOneHarness("the inner object level", rec => rec.innerObjectWithCallbacks: HarnessedLifecycleCallbacks)
     testOneHarness("the field level", rec => rec.stringFieldWithCallbacks: HarnessedLifecycleCallbacks)
   }
 
