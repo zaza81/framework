@@ -99,10 +99,28 @@ trait MetaRecord[BaseRecord <: Record[BaseRecord]] {
 
   private def isLifecycle(m: Method) = classOf[LifecycleCallbacks].isAssignableFrom(m.getReturnType)
 
-  private def isField(m: Method) = !m.isSynthetic && classOf[Field[_, _]].isAssignableFrom(m.getReturnType)
+  private def isField(m: Method) = {
+    val ret = !m.isSynthetic && classOf[Field[_, _]].isAssignableFrom(m.getReturnType)
+    ret
+  }
 
-  def introspect(rec: BaseRecord, methods: Array[Method])(f: (Method, Field[_, BaseRecord]) => Any) = {
-    for (v <- methods  if isField(v)) {
+  def introspect(rec: BaseRecord, methods: Array[Method])(f: (Method, Field[_, BaseRecord]) => Any): Unit = {
+
+    // find all the potential fields
+    val potentialFields = methods.toList.filter(isField)
+
+    // any fields with duplicate names get put into a List
+    val map: Map[String, List[Method]] = potentialFields.foldLeft[Map[String, List[Method]]](Map()){
+      case (map, method) => val name = method.getName
+      map + (name -> (method :: map.getOrElse(name, Nil)))
+    }
+
+    // sort each list based on having the most specific type and use that method
+    val realMeth = map.values.map(_.sortWith {
+      case (a, b) => !a.getReturnType.isAssignableFrom(b.getReturnType)
+    }).map(_.head)
+
+    for (v <- realMeth) {
       v.invoke(rec) match {
         case mf: Field[_, BaseRecord] if !mf.ignoreField_? =>
           mf.setName_!(v.getName)
@@ -124,12 +142,12 @@ trait MetaRecord[BaseRecord <: Record[BaseRecord]] {
     introspect(this, methods) {
       case (v, mf) => tArray += FieldHolder(mf.name, v, mf)
     }
-    
+
     fieldList = {
       val ordered = fieldOrder.flatMap(f => tArray.find(_.metaField == f))
       ordered ++ (tArray -- ordered)
     }
-    
+
     fieldMap = Map() ++ fieldList.map(i => (i.name, i))
   }
 
@@ -213,7 +231,7 @@ trait MetaRecord[BaseRecord <: Record[BaseRecord]] {
     }
     JsObj(tups:_*)
   }
-  
+
   /**
    * Retuns the JSON representation of <i>inst</i> record, converts asJValue to JsObj
    *
@@ -296,7 +314,7 @@ trait MetaRecord[BaseRecord <: Record[BaseRecord]] {
   def setFieldsFromJsonString(inst: BaseRecord, json: String): Box[Unit] =
     setFieldsFromJValue(inst, JsonParser.parse(json))
 
-  protected def foreachCallback(inst: BaseRecord, f: LifecycleCallbacks => Any) {
+  def foreachCallback(inst: BaseRecord, f: LifecycleCallbacks => Any) {
     lifecycleCallbacks.foreach(m => f(m._2.invoke(inst).asInstanceOf[LifecycleCallbacks]))
   }
 
