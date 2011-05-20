@@ -20,10 +20,20 @@ package mapper
 
 /**
  * Add this trait to a Mapper for managed one-to-many support
+ * For example: class Contact extends LongKeyedMapper[Contact] with OneToMany[Long, Contact] { ... }
+ * @tparam K the type of the primary key
+ * @tparam T the mapper type
  * @author nafg
  */
 trait OneToMany[K,T<:KeyedMapper[K, T]] extends KeyedMapper[K,T] { this: T =>
-  private var oneToManyFields: List[MappedOneToManyBase[_]] = Nil
+  //private var oneToManyFields: List[MappedOneToManyBase[_]] = Nil
+  private[mapper] lazy val oneToManyFields: List[MappedOneToManyBase[_]] = {
+    new FieldFinder[T, MappedOneToManyBase[_]](
+      getSingleton,
+      net.liftweb.common.Logger(classOf[OneToMany[K,T]])
+    ).accessorMethods map (_.invoke(this).asInstanceOf[MappedOneToManyBase[_]])
+  }
+  
   /**
    * An override for save to propagate the save to all children
    * of this parent.
@@ -100,7 +110,7 @@ trait OneToMany[K,T<:KeyedMapper[K, T]] extends KeyedMapper[K,T] { this: T =>
     }
     protected def delegate_=(d: List[O]) = _delegate = d
 
-    oneToManyFields = this :: oneToManyFields
+    //oneToManyFields = this :: oneToManyFields
 
     /**
      * Takes ownership of e. Sets e's foreign key to our primary key
@@ -282,7 +292,8 @@ class LongMappedMapper[T<:Mapper[T], O<:KeyedMapper[Long,O]](theOwner: T, foreig
  * @deprecated Use LongMappedMapper instead, to avoid mixing in MappedLongForeignKey manually. May be folded into it in the future.
  * @author nafg
  */
-@deprecated
+//TODO fold into LongMappedMapper
+@deprecated("Use LongMappedMapper or LongMappedForeignLey instead")
 trait LongMappedForeignMapper[T<:Mapper[T],O<:KeyedMapper[Long,O]]
                               extends MappedLongForeignKey[T,O]
                               with LifecycleCallbacks {
@@ -315,4 +326,94 @@ trait LongMappedForeignMapper[T<:Mapper[T],O<:KeyedMapper[Long,O]]
     if (obj eq Empty) List(FieldError(this, scala.xml.Text("Required field: " + name)))
     else Nil
 }
+
+class FieldFinder[A <: Mapper[A], T: ClassManifest](metaMapper: Mapper[A], logger: net.liftweb.common.Logger) {
+    import java.lang.reflect._
+      
+    logger.debug("Created FieldFinder for " + classManifest[T].erasure)
+      
+    def isMagicObject(m: Method) = m.getReturnType.getName.endsWith("$"+m.getName+"$") && m.getParameterTypes.length == 0
+    
+    def typeFilter: Class[_]=>Boolean = classManifest[T].erasure.isAssignableFrom
+
+    /**
+     * Find the magic mapper fields on the superclass
+     */
+    def findMagicFields(onMagic: Mapper[A], staringClass: Class[_]): List[Method] = {
+      // If a class name ends in $module, it's a subclass created for scala object instances
+      def deMod(in: String): String =
+        if (in.endsWith("$module")) in.substring(0, in.length - 7)
+        else in
+
+      // find the magic fields for the given superclass
+      def findForClass(clz: Class[_]): List[Method] = clz match {
+        case null => Nil
+        case c =>
+          // get the names of fields that represent the type we want
+
+          val fields = Map(c.getDeclaredFields.
+                           filter{f =>
+                              val ret = typeFilter(f.getType)
+                              logger.debug("typeFilter(" + f.getType + "); T=" + classManifest[T].erasure)
+                              ret
+                           }.
+                           map(f => (deMod(f.getName), f)) :_*)
+                           
+          logger.debug("fields: " + fields)
+
+          // this method will find all the super classes and super-interfaces
+          def getAllSupers(clz: Class[_]): List[Class[_]] = clz match {
+            case null => Nil
+            case c =>
+              c :: c.getInterfaces.toList.flatMap(getAllSupers) :::
+              getAllSupers(c.getSuperclass)
+          }
+
+          // does the method return an actual instance of an actual class that's
+          // associated with this Mapper class
+          def validActualType(meth: Method): Boolean = {
+            try {
+              // invoke the method
+              meth.invoke(onMagic) match {
+                case null =>
+                  logger.debug("Not a valid mapped field: %s".format(meth.getName))
+                  false
+                case inst =>
+                  // do we get a T of some sort back?
+                  if (!typeFilter(inst.getClass)) false
+                  else {
+                    // find out if the class name of the actual thing starts
+                    // with the name of this class or some superclass...
+                    // basically, is an inner class of this class
+                    getAllSupers(clz).find{
+                      c =>
+                      inst.getClass.getName.startsWith(c.getName)}.isDefined
+                  }
+              }
+
+            } catch {
+              case e =>
+                logger.debug("Not a valid mapped field: %s, got exception: %s".format(meth.getName, e))
+                false
+            }
+          }
+
+          // find all the declared methods
+          val meths = c.getDeclaredMethods.toList.
+          filter(_.getParameterTypes.length == 0). // that take no parameters
+          filter(m => Modifier.isPublic(m.getModifiers)). // that are public
+          filter(m => fields.contains(m.getName) && // that are associated with private fields
+                 fields(m.getName).getType == m.getReturnType).
+          filter(validActualType) // and have a validated type  
+
+          meths ::: findForClass(clz.getSuperclass)
+      }
+
+      findForClass(staringClass).distinct
+    }
+
+    lazy val accessorMethods = findMagicFields(metaMapper, metaMapper.getClass.getSuperclass)
+  }
+
+
 
