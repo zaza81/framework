@@ -102,8 +102,16 @@ trait ManyToMany extends BaseKeyedMapper {
               removedJoin // well, noLongerRemovedJoin...
             case None =>
               val newJoin = joinMeta.create
-              field(newJoin).set(ManyToMany.this.primaryKeyField.is)
-              otherField.actualField(newJoin).set(e.primaryKeyField.is)
+              val joinParentFK = field(newJoin)
+              joinParentFK.set(ManyToMany.this.primaryKeyField.is)
+              joinParentFK match {
+                case mfk: MappedForeignKey[_,_,T] => mfk.primeObj(Full(ManyToMany.this))
+              }
+              val joinChildFK = otherField.actualField(newJoin)
+              joinChildFK.set(e.primaryKeyField.is)
+              joinChildFK match {
+                case mfk: MappedForeignKey[_,_,T2] => mfk.primeObj(Full(e))
+              }
               newJoin
           }
         case Some(join) =>
