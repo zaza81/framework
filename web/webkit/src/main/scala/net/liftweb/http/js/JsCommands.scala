@@ -193,7 +193,6 @@ trait JsExp extends HtmlFixer with ToJsCmd {
   @deprecated
   def >>(right: JsMember): JsExp = ~>(right)
 
-
   def cmd: JsCmd = JsCmds.Run(toJsCmd + ";")
 
 
@@ -204,7 +203,34 @@ trait JsExp extends HtmlFixer with ToJsCmd {
   def ===(right: JsExp): JsExp = new JsExp {
     def toJsCmd = JsExp.this.toJsCmd + " = " + right.toJsCmd
   }
-
+  
+  /**
+   * Creates a Javascript statement testing whether this JsExp is less than the given JsExp.
+   *
+   * @see JE.JsLt
+   */
+  def <(right: JsExp) = JE.JsLt(this, right)
+  
+  /**
+   * Creates a Javascript statement testing whether this JsExp is greater than the given JsExp.
+   *
+   * @see JE.JsGt
+   */
+  def >(right: JsExp) = JE.JsGt(this, right)
+  
+  /**
+   * Creates a Javascript statement testing whether this JsExp is less than or equal to the given JsExp.
+   *
+   * @see JE.JsLtEq
+   */
+  def <=(right: JsExp) = JE.JsLtEq(this, right)
+  
+  /**
+   * Creates a Javascript statement testing whether this JsExp is greater than or equal to the given JsExp.
+   *
+   * @see JE.JsGtEq
+   */
+  def >=(right: JsExp) = JE.JsGtEq(this, right)
 }
 
 trait JsMember {
@@ -431,9 +457,51 @@ object JE {
     def toJsCmd = rawJsCmd
   }
 
+  /**
+   * A Scala representation of a Javascript variable.
+   *
+   * @see Var
+   */
   case class JsVar(varName: String, andThen: String*) extends JsExp {
     def toJsCmd = varName + (if (andThen.isEmpty) ""
                              else andThen.mkString(".", ".", ""))
+    def ++ = JsRaw(toJsCmd + "++")
+    def -- = JsRaw(toJsCmd + "--")
+    def +=(right: JsExp) = JsRaw(toJsCmd + " += " + right.toJsCmd)
+    def -=(right: JsExp) = JsRaw(toJsCmd + " -= " + right.toJsCmd)
+    
+    /**
+     * Refer to the variable's property.
+     *
+     * Like JsExp's ~> this method accesses a property on the Javascript object.
+     * However, unlike that method, this one returns another JsVar, rather than a simple JsExp.
+     * @see JsExp.~>
+     */
+    def -&(right: String) = JsVar(varName, (right :: andThen.toList.reverse).reverse :_*)
+    
+    def apply(params: JsExp*) = Call(toJsCmd, params :_*)
+  }
+  
+  /**
+   * An alias for {@link JsVar}, the Scala representation of a Javascript variable.
+   *
+   * @see JsVar
+   */
+  val Var = JsVar
+
+  /**
+   * Declare a Javascript variable.
+   *
+   * newVar should be used to declare a new variable, rather than refer to existing one. {@link JsCmds.JsCrVar} is its nearest, JsCmd analog.
+   * newVar was added to enable compatibility with the variable Javascript loop representations, which expect a JsExp for the inital statement.
+   * @see JsVar
+   * @see Var
+   * @see JsCmds.JsCrVar
+   * @see JsFor
+   * @see For
+   */
+  case class newVar(varName: String) extends JsExp {
+    def toJsCmd = "var " + varName
   }
 
   /**
@@ -459,16 +527,60 @@ object JE {
     def toJsCmd = "value"
   }
 
+  /**
+   * A Scala representation of the Javsacript false value.
+   *
+   * @see False
+   */
   case object JsFalse extends JsExp {
     def toJsCmd = "false"
   }
+  
+  /**
+   * An alias for {@link JsFalse}, the Scala representation of the Javsacript false value.
+   *
+   * @see JsFalse
+   */
+  val False = JsFalse
 
+  /**
+   * A Scala representation of the Javsacript null value.
+   *
+   * @see Null
+   */
   case object JsNull extends JsExp {
     def toJsCmd = "null"
   }
+  
+  /**
+   * An alias for {@link JsNull}, the Scala representation of the Javsacript false value.
+   *
+   * @see JsNull
+   */
+  // NOTE: There is also a scala.xml.Null. Don't add this alias?
+  // val Null = JsNull
 
+  /**
+   * A Scala representation of the Javsacript true value.
+   *
+   * @see True
+   */
   case object JsTrue extends JsExp {
     def toJsCmd = "true"
+  }
+  
+  /**
+   * An alias for {@link JsTrue}, the Scala representation of the Javsacript false value.
+   *
+   * @see JsTrue
+   */
+  val True = JsTrue
+
+  /**
+   * A Scala representation of the Javsacript undefined value.
+   */
+  case object Undefined extends JsExp {
+    def toJsCmd = "undefined"
   }
 
   /**
@@ -907,6 +1019,11 @@ object JsCmds {
     }.mkString("\n")+"};"
   }
 
+  /**
+   * A Scala representation of the Javascript if statement.
+   *
+   * @see If
+   */
   case object JsIf {
     def apply(condition: JsExp, body: JsCmd): JsCmd = JE.JsRaw("if ( " + condition.toJsCmd + " ) { " + body.toJsCmd + " }")
 
@@ -918,37 +1035,176 @@ object JsCmds {
     def apply(condition: JsExp, bodyTrue: JsExp, bodyFalse: JsExp): JsCmd =
     JE.JsRaw("if ( " + condition.toJsCmd + " ) { " + bodyTrue.toJsCmd + " } else { " + bodyFalse.toJsCmd + " }")
   }
+  
+  /**
+   * Another Scala representation of the Javascript if statement.
+   *
+   * This case class is different from {@link JsIf} because it actually contains values that can be referenced later
+   *  and the else clause can be explicitly set apart.
+   *
+   * This creates the possibility for a syntax closer to normal Javascript (or Scala) code. For example:
+   * <pre lang="scala">
+   * val console_log = Var("console") -& "log"
+   * If(Var("k") < 1) {
+   *   console_log("Too small")
+   * } Else {
+   *   console_log("Big enough")
+   * }
+   * </pre>
+   * @see JsIf
+   */
+  case class If(condition: JsExp)(body: JsExp) extends JsCmd {
+    def toJsCmd = "if ( " + condition.toJsCmd + " ) { " + body.toJsCmd + " }"
+    def toJsIf = JsIf(condition, body)
+    def Else(body2: JsExp) = JsIf(condition, body, body2)
+  }
+  
+  /**
+   * An implicit conversion to convert from the newer If to the older JsIf.
+   *
+   * @see If
+   * @see JsIf
+   */
+  implicit def IfToJsIf(i: If) = i.toJsIf
 
+  /**
+   * A Scala representation of the Javascript while loop statement.
+   *
+   * @see While
+   */
   case class JsWhile(condition: JsExp, body: JsExp) extends JsCmd {
     def toJsCmd = "while ( " + condition.toJsCmd + " ) { " + body.toJsCmd + " }"
   }
+  
+  /**
+   * An alias of {@link JsWhile}, the Scala representation of the Javascript while loop statement.
+   *
+   * @see JsWhile
+   */
+  object While {
+    def apply(condition: JsExp)(body: JsExp) = JsWhile(condition, body)
+  }
 
+  /**
+   * A Scala representation of the Javascript with statement.
+   *
+   * @see With
+   */
   case class JsWith(reference: String, body: JsExp) extends JsCmd {
     def toJsCmd = "with ( " + reference + " ) { " + body.toJsCmd + " }"
   }
+  
+  /**
+   * An alias of {@link JsWith}, the Scala representation of the Javascript with statement.
+   *
+   * @see JsWith
+   */
+  object With {
+    def apply(reference: String)(body: JsExp) = JsWhile(reference, body)
+  }
 
+  /**
+   * A Scala representation of the Javascript do..while loop statement.
+   *
+   * @see Do
+   */
   case class JsDoWhile(body: JsExp, condition: JsExp) extends JsCmd {
     def toJsCmd = "do { " + body.toJsCmd + " } while ( " + condition.toJsCmd + " )"
   }
+  
+  /**
+   * An alias for {@link JsDoWhile}, the Scala representation of the Javascript do..while loop statement.
+   *
+   * Note: This case class deliberately does not extend JsCmd so that the user is required to call the While method to have a usable construction.
+   * @see JsDoWhile
+   */
+  case class Do(body: JsExp) {
+    def While(condition: JsExp) = JsDoWhile(body, condition)
+  }
 
+  /**
+   * A Scala representation of the Javascript for loop statement.
+   *
+   * @see For
+   */
   case class JsFor(initialExp: JsExp, condition: JsExp, incrementExp: JsExp, body: JsExp) extends JsCmd {
     def toJsCmd = "for ( " + initialExp.toJsCmd + "; " +
     condition.toJsCmd + "; " +
     incrementExp.toJsCmd + " ) { " + body.toJsCmd + " }"
   }
+  
+  /**
+   * A Scala representation of the Javascript for loop statement whose parameter list is broken into two parts to enable more Javascript-looking code.
+   *
+   * For example:
+   * <pre lang="scala">
+   * val console_log = Var("console") -& "log"
+   * For(newVar("k") === 0, Var("k") < Var("someArray") -& "length", Var("k")++) {
+   *   console_log(k)
+   * }
+   * </pre>
+   * @example For(var k = 0, k < someArray.length, k++) { console.log(k) }
+   * @see JsFor
+   */
+  object For {
+    def apply(initialExp: JsExp, condition: JsExp, incrementExp: JsExp)(body: JsExp) = JsFor(initialExp, condition, incrementExp, body)
+  }
 
+  /**
+   * A Scala representation of the Javascript for..in loop statement.
+   *
+   * @see ForIn
+   */
   case class JsForIn(initialExp: JsExp, reference: String, body: JsCmd) extends JsCmd {
     def toJsCmd = "for ( " + initialExp.toJsCmd + " in " + reference + ") { " + body.toJsCmd + " }"
   }
+  
+  /**
+   * An alias for {@link JsForIn}, the Scala representation of the Javascript for..in loop statement.
+   *
+   * @see JsForIn
+   */
+  object ForIn {
+    def apply(variable: JE.JsVar, reference: JE.JsVar)(body: JsExp) = JsForIn(variable.toJsCmd, reference.toJsCmd, body.cmd)
+  }
 
+  /**
+   * A Scala representation of the Javascript break statement.
+   *
+   * @see Break
+   */
   case object JsBreak extends JsCmd {
     def toJsCmd = "break"
   }
+  
+  /**
+   * An alias for {@link JsBreak}, the Scala representation of the Javascript break statement.
+   *
+   * @see JsBreak
+   */
+  val Break = JsBreak
 
+  /**
+   * A Scala representation of the Javascript continue statement.
+   *
+   * @see Continue
+   */
   case object JsContinue extends JsCmd {
     def toJsCmd = "continue"
   }
+  
+  /**
+   * An alias for {@link JsContinue}, the Scala representation of the Javascript continue statement.
+   *
+   * @see JsContinue
+   */
+  val Continue = JsContinue
 
+  /**
+   * A Scala representation of the Javascript return statement.
+   *
+   * @see Return
+   */
   object JsReturn {
     def apply(in: JsExp): JsCmd = new JsCmd {
       def toJsCmd = "return " + in.toJsCmd
@@ -958,6 +1214,13 @@ object JsCmds {
       def toJsCmd = "return "
     }
   }
+  
+  /**
+   * An alias for {@link JsReturn}, the Scala representation of the Javascript return statement.
+   *
+   * @see JsReturn
+   */
+  val Return = JsReturn
 
 }
 
