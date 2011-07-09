@@ -82,14 +82,14 @@ trait HTTPContext {
   def attributes: List[(String, Any)]
 
   /**
-   * @param - name
-   * @param - value. Any reference. Note that this is not typesfe and you need to explicitely do
+   * @param name
+   * @param value. Any reference. Note that this is not typesfe and you need to explicitely do
    *          the casting when reading this attribute.
    */
   def setAttribute(name: String, value: Any): Unit
 
   /**
-   * @param - name. The name ofthe parameter that needs to be removed.
+   * @param name. The name ofthe parameter that needs to be removed.
    */
   def removeAttribute(name: String): Unit
 }

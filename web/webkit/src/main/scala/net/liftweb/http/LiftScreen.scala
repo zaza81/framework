@@ -598,13 +598,13 @@ trait AbstractScreen extends Factory {
    * also call-by-name which is handy for constructs like:
    * <code class="scala">SomeExternalRequestVarOrSessionVar.get</code>
    *
-   * @theToForm - a function to convert the field into a form
+   * @param theToForm - a function to convert the field into a form
    *
-   * @otherValue - a handy way include other values in the field.  The other value is
+   * @param otherValue - a handy way include other values in the field.  The other value is
    * calcualted when the field is initialized.  You can, for example, put
    * a list of valid options in the field.
    *
-   * @stuff - a list of filters and validations for the field
+   * @param stuff - a list of filters and validations for the field
    *
    * @return a newly minted Field
    */
@@ -675,7 +675,7 @@ trait AbstractScreen extends Factory {
    * @param defaultValue the starting value of the field (call-by-name)
    * @param stuff the filters, validators and attributes
    *
-   * @returns a newly minted Field
+   * @return a newly minted Field
    */
   protected def password(name: => String, defaultValue: => String, stuff: FilterOrValidate[String]*): Field {type ValueType = String} = {
     val eAttr = grabParams(stuff)
@@ -694,7 +694,7 @@ trait AbstractScreen extends Factory {
    * @param defaultValue the starting value of the field (call-by-name)
    * @param stuff the filters, validators and attributes
    *
-   * @returns a newly minted Field
+   * @return a newly minted Field
    */
   protected def text(name: => String, defaultValue: => String, stuff: FilterOrValidate[String]*): Field {type ValueType = String} = {
     val eAttr = grabParams(stuff)
@@ -715,7 +715,7 @@ trait AbstractScreen extends Factory {
    *
    * @param stuff - a list of filters and validations for the field
    *
-   * @returns a newly minted Field{type ValueType = String}
+   * @return a newly minted Field{type ValueType = String}
    */
   protected def textarea(name: => String, defaultValue: => String, stuff: FilterOrValidate[String]*): Field {type ValueType = String} =
     textarea(name, defaultValue, 5, 80, stuff: _*)
@@ -731,7 +731,7 @@ trait AbstractScreen extends Factory {
    *
    * @param stuff - a list of filters and validations for the field
    *
-   * @returns a newly minted Field{type ValueType = String}
+   * @return a newly minted Field{type ValueType = String}
    */
   protected def textarea(name: => String, defaultValue: => String, rows: Int, cols: Int, stuff: FilterOrValidate[String]*):
   Field {type ValueType = String} = {
@@ -759,7 +759,7 @@ trait AbstractScreen extends Factory {
    * @param stuff - a list of filters and validations for the field
    * @param f a PairStringPromoter (a wrapper around a function) that converts T => display String
    *
-   * @returns a newly minted Field{type ValueType = String}
+   * @return a newly minted Field{type ValueType = String}
    */
   protected def select[T](name: => String, default: => T, choices: => Seq[T], stuff: FilterOrValidate[T]*)
                          (implicit f: SHtml.PairStringPromoter[T]): Field {type ValueType = T; type OtherValueType = Seq[T]}
@@ -784,7 +784,7 @@ trait AbstractScreen extends Factory {
    * @param stuff - a list of filters and validations for the field
    * @param f a PairStringPromoter (a wrapper around a function) that converts T => display String
    *
-   * @returns a newly minted Field{type ValueType = String}
+   * @return a newly minted Field{type ValueType = String}
    */
   protected def multiselect[T](name: => String, default: => Seq[T], choices: => Seq[T], stuff: FilterOrValidate[Seq[T]]*)
                               (implicit f: SHtml.PairStringPromoter[T]): Field {type ValueType = Seq[T]; type OtherValueType = Seq[T]}
@@ -824,7 +824,7 @@ trait AbstractScreen extends Factory {
    * @param stuff - a list of filters and validations for the field
    * @param f a PairStringPromoter (a wrapper around a function) that converts T => display String
    *
-   * @returns a newly minted Field{type ValueType = String}
+   * @return a newly minted Field{type ValueType = String}
    */
   protected def radio(name: => String, default: => String, choices: => Seq[String], stuff: FilterOrValidate[String]*):
   Field {type ValueType = String; type OtherValueType = Seq[String]} = {

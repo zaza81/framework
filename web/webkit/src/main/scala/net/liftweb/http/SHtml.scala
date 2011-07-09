@@ -943,10 +943,10 @@ trait SHtml {
   /**
    * create an anchor tag around a body
    *
-   * @to - the target
+   * @param to - the target
    * @param func - the function to invoke when the link is clicked
    * @param body - the NodeSeq to wrap in the anchor tag
-   * @attrs - the (optional) attributes for the HTML element
+   * @param attrs - the (optional) attributes for the HTML element
    */
   def link(to: String, func: () => Any, body: NodeSeq,
            attrs: ElemAttr*): Elem = {
@@ -1526,14 +1526,14 @@ trait SHtml {
    * the request will be processed by the jsonHandler
    *
    * @param jsonHandler - the handler that process this request
-   * @oaram formId - the id of the form
+   * @param formId - the id of the form
    */
   def submitJsonForm(jsonHandler: JsonHandler, formId: String):JsCmd = jsonHandler.call("processForm", FormToJSON(formId))
 
   /**
    * Having a regular form, this method can be used to send the serialized content of the form.
    *
-   * @oaram formId - the id of the form
+   * @param formId - the id of the form
    */
   def submitAjaxForm(formId: String):JsCmd = SHtml.makeAjaxCall(LiftRules.jsArtifacts.serialize(formId))
 
@@ -1585,7 +1585,7 @@ trait SHtml {
   /**
    * Having a regular form, this method can be used to send the serialized content of the form.
    *
-   * @oaram formId - the id of the form
+   * @param formId - the id of the form
    * @param postSubmit - the function that needs to be called after a successfull request
    */
   def submitAjaxForm(formId: String, postSubmit: Call):JsCmd =

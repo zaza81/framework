@@ -1296,7 +1296,7 @@ class LiftRules() extends Factory with FormVendor with LazyLoggable {
    * Modifies the root relative paths from the css url-s
    *
    * @param path - the path of the css resource
-   * @prefix - the prefix to be added on the root relative paths. If this is Empty
+   * @param prefix - the prefix to be added on the root relative paths. If this is Empty
    * 	       the prefix will be the application context path.
    */
   def fixCSS(path: List[String], prefix: Box[String]) {
