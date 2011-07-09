@@ -1022,7 +1022,7 @@ object JsCmds {
   /**
    * A Scala representation of the Javascript if statement.
    *
-   * @see If
+   * @see jIf
    */
   case object JsIf {
     def apply(condition: JsExp, body: JsCmd): JsCmd = JE.JsRaw("if ( " + condition.toJsCmd + " ) { " + body.toJsCmd + " }")
@@ -1045,15 +1045,17 @@ object JsCmds {
    * This creates the possibility for a syntax closer to normal Javascript (or Scala) code. For example:
    * <pre lang="scala">
    * val console_log = Var("console") -& "log"
-   * If(Var("k") < 1) {
+   * jIf(Var("k") < 1) {
    *   console_log("Too small")
    * } Else {
    *   console_log("Big enough")
    * }
    * </pre>
+   *
+   * NOTE: This is called jIf instead of If because there is also an If LocParam.
    * @see JsIf
    */
-  case class If(condition: JsExp)(body: JsExp) extends JsCmd {
+  case class jIf(condition: JsExp)(body: JsExp) extends JsCmd {
     def toJsCmd = "if ( " + condition.toJsCmd + " ) { " + body.toJsCmd + " }"
     def toJsIf = JsIf(condition, body)
     def Else(body2: JsExp) = JsIf(condition, body, body2)
@@ -1062,10 +1064,10 @@ object JsCmds {
   /**
    * An implicit conversion to convert from the newer If to the older JsIf.
    *
-   * @see If
+   * @see jIf
    * @see JsIf
    */
-  implicit def IfToJsIf(i: If) = i.toJsIf
+  implicit def jIfToJsIf(i: jIf) = i.toJsIf
 
   /**
    * A Scala representation of the Javascript while loop statement.
