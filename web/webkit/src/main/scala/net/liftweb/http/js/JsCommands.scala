@@ -480,6 +480,13 @@ object JE {
     def -&(right: String) = JsVar(varName, (right :: andThen.toList.reverse).reverse :_*)
     
     def apply(params: JsExp*) = Call(toJsCmd, params :_*)
+    
+    /**
+     * Assign the given value to the Javascript variable.
+     *
+     * @see JsExp.===
+     */
+    def :=(right: JsExp) = ===(right)
   }
   
   /**
