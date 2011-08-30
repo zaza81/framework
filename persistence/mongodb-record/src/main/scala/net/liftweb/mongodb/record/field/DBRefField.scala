@@ -28,6 +28,7 @@ import scala.xml.NodeSeq
 import com.mongodb.{BasicDBObject, BasicDBObjectBuilder, DBObject, DBRef}
 import com.mongodb.util.JSON
 import org.bson.types.ObjectId
+import org.bson.BSONObject
 
 /*
 * Field for storing a DBRef
@@ -75,17 +76,55 @@ class DBRefField[OwnerType <: BsonRecord[OwnerType], RefType <: MongoRecord[RefT
     case null => Full(set(null))
     case s: String => setFromString(s)
     case None | Empty | Failure(_, _, _) => Full(set(null))
-    case o => setFromString(o.toString)
+    /**
+     * BWM - 8/19/11
+     * In some cases such as Lazy decoding MongoDB may return an
+     * instance of BSONObject instead of a concrete DBRef for performance reasons.
+     *
+     * If we didn't catch an actual DBRef above, but find a BSONObject, attempt to extract
+     * the reference related information from the reference to instantiate a new DBRef
+     * ( future releases of the java driver are expected to return DBRefs but this is
+     * a good safe fallback which performs better than serializing to JSON )
+     */
+    case dbo: BSONObject if dbo.containsField("$ref") && dbo.containsField("$id") =>
+      setRawRef(dbo.get("$ref").asInstanceOf[String], dbo.get("$id"))
+    case o => setFromString(o.toString) // TODO - Consider using com.mongodb.util.JSON.serialize instead of assuming toString creates JSON
   }
+
+  /**
+   * Create and set a reference from 'raw' DBRef
+   * info that came either from JSON or a basic nested
+   * DBObject (as Lazy mode may produce)
+   *
+   * Caller is expected to have already converted the $id
+   * field to a valid type (such as ObjectId if appropriate)
+   *
+   * TODO - Shouldn't we be running an invariant check that
+   * $ref points to the collection we expect it to?!
+   */
+  def setRawRef(refTo: String, id: AnyRef): Box[DBRef] =
+    MongoDB.use(ref.meta.mongoIdentifier) { db =>
+      Full(set(new DBRef(db, refTo, id)))
+    }
+
 
   // assume string is json
   def setFromString(in: String): Box[DBRef] = {
-    val dbo = JSON.parse(in).asInstanceOf[BasicDBObject]
+    /* BWM - 8/19/11
+     * We shouldn't ever assume things are BasicDBObject, which is
+     * a very specific concrete instance of DBObject. Treat it instead
+     * as a generic interface of BSONObject (since we don't need
+     * the DBObject partialObject hooks)
+     *
+     * It is entirely possible to get something other than BasicDBObject
+     * back which would cause this to blow up at runtime.
+     */
+    val dbo = JSON.parse(in).asInstanceOf[BSONObject]
     MongoDB.use(ref.meta.mongoIdentifier) ( db => {
       val id = dbo.get("$id").toString
       ObjectId.isValid(id) match {
-        case true => Full(set(new DBRef(db, dbo.get("$ref").toString, new ObjectId(id))))
-        case false => Full(set(new DBRef(db, dbo.get("$ref").toString, id)))
+        case true => setRawRef(dbo.get("$ref").toString, new ObjectId(id))
+        case false => setRawRef(dbo.get("$ref").toString, id)
       }
     })
   }

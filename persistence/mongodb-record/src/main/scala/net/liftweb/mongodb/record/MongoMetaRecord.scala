@@ -64,7 +64,7 @@ trait MongoMetaRecord[BaseRecord <: MongoRecord[BaseRecord]]
   }
 
   protected def useColl[T](f: DBCollection => T) =
-    MongoDB.useCollection(mongoIdentifier, collectionName)(f)
+    MongoDB.useCollection(mongoIdentifier, collectionName, true)(f) // Lazy read mode (TODO - Cache lazy collections?)
 
   def bulkDelete_!!(qry: DBObject): Unit = {
     useColl(coll =>

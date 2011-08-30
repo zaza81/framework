@@ -271,6 +271,7 @@ object MongoRecordExamplesSpec extends Specification("MongoRecordExamples Specif
 
     fromDb.isDefined must_== true
 
+    var x = 0
     for (t <- fromDb) {
       t._id.value must_== tr._id.value
       t.booleanfield.value must_== tr.booleanfield.value
@@ -278,6 +279,12 @@ object MongoRecordExamplesSpec extends Specification("MongoRecordExamples Specif
       TstRecord.formats.dateFormat.format(tr.datetimefield.value.getTime)
       t.doublefield.value must_== tr.doublefield.value
       t.intfield.value must_== tr.intfield.value
+      x += 1
+      System.err.println("(%d) [ID: %s] T Locale: '0x%02X' [%d - %s / %s] TR Locale: '%s' [%d - %s / %s]".format(
+        x, t._id,
+        t.localefield.value.toString().getBytes()(5), t.localefield.value.length(), t.localefield.getClass, t.localefield.value.getClass,
+        tr.localefield, tr.localefield.value.length(), tr.localefield.getClass, t.localefield.value.getClass)
+      )
       t.localefield.value must_== tr.localefield.value
       t.longfield.value must_== tr.longfield.value
       t.passwordfield.isMatch(pwd) must_== true

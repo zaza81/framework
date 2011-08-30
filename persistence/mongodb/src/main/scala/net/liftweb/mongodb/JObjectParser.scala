@@ -26,7 +26,8 @@ import net.liftweb.json._
 import net.liftweb.common.Box
 
 import com.mongodb.{BasicDBObject, BasicDBList, DBObject}
-import org.bson.types.ObjectId
+import org.bson.BSONObject
+import org.bson.types.{BasicBSONList, ObjectId}
 
 object JObjectParser {
 
@@ -48,8 +49,28 @@ object JObjectParser {
       case x if primitive_?(x.getClass) => primitive2jvalue(x)
       case x if datetype_?(x.getClass) => datetype2jvalue(x)(formats)
       case x if mongotype_?(x.getClass) => mongotype2jvalue(x)(formats)
-      case x: BasicDBList => JArray(x.toList.map( x => serialize(x, formats)))
-      case x: BasicDBObject => JObject(
+      /**
+       * BWM 8/19/11:
+       * This was using the concrete MongoDB "BasicDBList" class,
+       * moved it backwards to BasicBSONList to allow subclasses to work.
+       *
+       * TODO - There is no abstract base interface for DBList, but I'm of a mind
+       * that any Array or List-like structure should be parsed into JArray
+       */
+      case x: BasicBSONList => JArray(x.toList.map( x => serialize(x, formats)))
+
+      /**
+       * BWM - 8/19/11
+       * This formerly used a concrete BasicDBObject class, which breaks
+       * support for any custom DBObject implementations such as Casbah's
+       * MongoDBObject, Java Driver's LazyDBObject or any other customisation.
+       *
+       * Moved this back completely to the BSON Type "BSONObject" for the widest
+       * possible MongoDB support. All DBObjects inherit from BSONObject and the
+       * standard for most stuff at 10gen / MongoDB is to recommend filtering on
+       * BSONObject to allow for user customised types.
+       */
+      case x: BSONObject => JObject(
         x.keySet.toList.map { f =>
           JField(f.toString, serialize(x.get(f.toString), formats))
         }

@@ -22,6 +22,7 @@ import java.util.concurrent.ConcurrentHashMap
 import scala.collection.immutable.HashSet
 
 import com.mongodb._
+import com.mongodb.casbah.util.bson.decoding.OptimizedLazyDBDecoder
 
 /*
 * A trait for identfying Mongo instances
@@ -134,8 +135,37 @@ object MongoDB {
   /*
   * Get a Mongo collection. Gets a Mongo db first.
   */
-  private def getCollection(name: MongoIdentifier, collectionName: String): Option[DBCollection] = getDb(name) match {
-    case Some(mongo) if mongo != null => Some(mongo.getCollection(collectionName))
+  private def getCollection(name: MongoIdentifier, collectionName: String): Option[DBCollection] =
+    getCollection(name, collectionName, false)
+
+  /*
+  * Get a Mongo collection. Gets a Mongo db first.
+  *
+  * Setting lazyReads will use a LazyBSON Decoder,
+  * which skips decoding the BSON until you ask for a specific
+  * field value.
+  *
+  * LazyReads are recommended for Lift-Record.  They may or may not
+  * yield improvements for the Lift-MongoDB DSL, etc... the lazy reads
+  * are *NOT* memoized so YMMV in non-Record situations.
+  */
+  private def getCollection(name: MongoIdentifier, collectionName: String, lazyReads: Boolean): Option[DBCollection] = getDb(name) match {
+    case Some(mongo) if mongo != null =>
+      val coll = mongo.getCollection(collectionName)
+      if (lazyReads) {
+        /**
+         * Setup a *lazy* decoded connection.
+         * This should yield significant performance benefits for lift-mongodb-record.
+         * The BSON is not fully deserialized into a DBObject, instead it is read lazily
+         * as each field is requested.  With Lift-MongoDB-Record this means there will
+         * be essentially *no* middle decoding step.
+         *
+         * Instead of MongoDB->BSON->DBObject->Lift-Record-Object we now go
+         * MongoDB->BSON->Lift-Record-Object.
+         */
+        coll.setDBDecoderFactory(OptimizedLazyDBDecoder.Factory)
+      }
+      Some(coll)
     case _ => None
   }
 
@@ -168,9 +198,25 @@ object MongoDB {
   /**
   * Executes function {@code f} with the mongo named {@code name} and collection names {@code collectionName}.
   * Gets a collection for you.
+  *
   */
-  def useCollection[T](name: MongoIdentifier, collectionName: String)(f: (DBCollection) => T): T = {
-    val coll = getCollection(name, collectionName) match {
+  def useCollection[T](name: MongoIdentifier, collectionName: String)(f: (DBCollection) => T): T =
+    useCollection[T](name, collectionName, false)(f)
+
+  /**
+   * Executes function {@code f} with the mongo named {@code name} and collection names {@code collectionName}.
+   * Gets a collection for you.
+   *
+   * Setting lazyReads will use a LazyBSON Decoder,
+   * which skips decoding the BSON until you ask for a specific
+   * field value.
+   *
+   * LazyReads are recommended for Lift-Record.  They may or may not
+   * yield improvements for the Lift-MongoDB DSL, etc... the lazy reads
+   * are *NOT* memoized so YMMV in non-Record situations.
+   */
+  def useCollection[T](name: MongoIdentifier, collectionName: String, lazyReads: Boolean)(f: (DBCollection) => T): T = {
+    val coll = getCollection(name, collectionName, lazyReads) match {
       case Some(collection) => collection
       case _ => throw new MongoException("Collection not found: "+collectionName+". MongoIdentifier: "+name.toString)
     }
@@ -179,10 +225,27 @@ object MongoDB {
   }
 
   /**
-  * Same as above except uses DefaultMongoIdentifier
-  */
-  def useCollection[T](collectionName: String)(f: (DBCollection) => T): T = {
-    val coll = getCollection(DefaultMongoIdentifier, collectionName) match {
+   * Executes function {@code f} with the mongo named {@code name} and collection names {@code collectionName}.
+   * Gets a collection for you, using DefaultMongoIdentifier.
+   *
+   */
+  def useCollection[T](collectionName: String)(f: (DBCollection) => T): T =
+    useCollection[T](collectionName, false)(f)
+
+  /**
+   * Executes function {@code f} with the mongo named {@code name} and collection names {@code collectionName}.
+   * Gets a collection for you, using DefaultMongoIdentifier.
+   *
+   * Setting lazyReads will use a LazyBSON Decoder,
+   * which skips decoding the BSON until you ask for a specific
+   * field value.
+   *
+   * LazyReads are recommended for Lift-Record.  They may or may not
+   * yield improvements for the Lift-MongoDB DSL, etc... the lazy reads
+   * are *NOT* memoized so YMMV in non-Record situations.
+   */
+  def useCollection[T](collectionName: String, lazyReads: Boolean)(f: (DBCollection) => T): T = {
+    val coll = getCollection(DefaultMongoIdentifier, collectionName, lazyReads) match {
       case Some(collection) => collection
       case _ => throw new MongoException("Collection not found: "+collectionName+". MongoIdentifier: "+DefaultMongoIdentifier.toString)
     }

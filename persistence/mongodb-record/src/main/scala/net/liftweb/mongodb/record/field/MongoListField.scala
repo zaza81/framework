@@ -32,7 +32,8 @@ import net.liftweb.record.{Field, FieldHelpers, MandatoryTypedField, Record}
 import util.Helpers.tryo
 
 import com.mongodb._
-import org.bson.types.ObjectId
+import org.bson.types.{BasicBSONList, ObjectId}
+import org.bson.BSONObject
 
 /**
 * List field. Compatible with most object types,
@@ -104,13 +105,41 @@ class MongoListField[OwnerType <: BsonRecord[OwnerType], ListType](rec: OwnerTyp
     dbl
   }
 
-  // set this field's value using a DBObject returned from Mongo.
-  def setFromDBObject(dbo: DBObject): Box[List[ListType]] =
-    setBox(Full(dbo.asInstanceOf[BasicDBList].toList.asInstanceOf[List[ListType]]))
+  /**
+   * set this field's value using a DBObject returned from Mongo.
+   *
+   * BWM - 8/19/11
+   * This unfortunately previously didn't really test invariants well,
+   * and assumes that, as we were expecting a List we *must* have
+   * gotten a DBObject that *is* a list.
+   *
+   * Of course if you try casting as a list and it isn't... BOOM
+   *
+   * Some cases such as a broken database may give us an actual non-List DBObject
+   * however.  Also, Lazy mode may return an un-list'ed DBObject instead of a
+   * instance of DBList.
+   *
+   * For now, if it isn't an instance of BasicBSONList,
+   * I'm simply invoking toList on a BSONObject cast
+   *
+   * TODO - invariant testing for validity of a non DBList convert-to-List?
+   */
+  def setFromDBObject(dbo: DBObject): Box[List[ListType]] = setBox(dbo match {
+    case l: BasicBSONList => Full(l.toList.asInstanceOf[List[ListType]])
+    /* If it wasn't a list but a normal BSONObject, still try toList-ing
+     * TODO - Should we check that the keys are all integers to be sure?
+     */
+    case o: BSONObject =>
+      val b = List.newBuilder[ListType]
+      // TODO - I'm not sure I like this explicit blind cast to ListType
+      for (k <- o.keySet()) b += o.get(k).asInstanceOf[ListType]
+      Full(b.result)
+    case default => Failure("Unable to convert DBObject to a List: " + default.getClass)
+  })
 }
 
 /*
-* List of Dates. Use MongListField[OwnerType, Date] instead.
+* List of Dates. Use MongoListField[OwnerType, Date] instead.
 */
 @deprecated("Use MongListField[OwnerType, Date] instead")
 class MongoDateListField[OwnerType <: BsonRecord[OwnerType]](rec: OwnerType)
