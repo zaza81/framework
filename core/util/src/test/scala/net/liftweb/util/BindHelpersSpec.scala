@@ -893,7 +893,18 @@ object CssBindHelpersSpec extends Specification  {
     (answer \ "a" \ "@href").text must_== "Hi"
       (answer \\ "li").length must_== 0
     }
-    
+
+    "bind something implicity convertable to a String" in {
+      class X
+      implicit def X2str(x: X): String = "This is X"
+      implicitly[X => String] apply new X must_== "This is X"
+      (implicitly[X => StringPromotable] apply new X toString) must_== "This is X"
+      val s: String = new X
+      s must_== "This is X"
+      val sp: StringPromotable = new X
+      sp.toString must_== "This is X"
+      ("foo" #> new X apply <foo/> text) must_== "This is X"
+    }
 
   }
 }
@@ -907,6 +918,12 @@ object CheckTheImplicitConversionsForToCssBindPromoter {
   val bog = new ToCssBindPromoter(Empty, Empty)
 
   import BindHelpers._
+
+  implicitly[CanBind[NodeSeq]]
+  implicitly[CanBindN[Iterable[NodeSeq]]]
+  implicitly[CanBindN[NodeSeq => Iterable[NodeSeq]]]
+  implicitly[CanBindN[NodeSeq => Seq[Node]]]
+  implicitly[CanBind[NodeSeq => String]]
 
   "foo" #> "baz"
 

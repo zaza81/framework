@@ -1339,7 +1339,7 @@ trait BindHelpers {
     new ToCssBindPromoter(Full(str), CssSelectorParser.parse(str))
 
   /**
-   * promote a String to a ToCssBindPromotor
+   * promote a CssSelector to a ToCssBindPromotor
    */
   implicit def cssSelectorToCssBindPromoter(sel: CssSelector): ToCssBindPromoter =
     new ToCssBindPromoter(Empty, Full(sel))
@@ -1479,7 +1479,7 @@ sealed trait CssSel extends Function1[NodeSeq, NodeSeq] {
   /**
    * Inserts a String constant according to the CssSelector rules
    */
-  def sel(selector: String, str: IterableConst): CssSel = this & (selector #> str)
+  //def sel(selector: String, str: IterableConst): CssSel = this & (selector #> str)
 
   /**
    * Inserts a String constant according to the CssSelector rules
@@ -2101,7 +2101,7 @@ final class CssJBridge {
   /**
    * Inserts a String constant according to the CssSelector rules
    */
-  def sel(selector: String, str: IterableConst): CssSel = (selector #> str)
+  //def sel(selector: String, str: IterableConst): CssSel = (selector #> str)
 
   /**
    * Inserts a String constant according to the CssSelector rules

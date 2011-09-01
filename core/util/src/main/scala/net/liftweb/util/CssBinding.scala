@@ -24,87 +24,98 @@ import java.util.{List => JavaList}
 import scala.collection.mutable.ListBuffer
 
 
+
 /**
- * A type class that creates CssSel instances for a value of some type
- * @param apply a function stringSelector => css => x => cssSel. stringSelector and css are the arguments for CssBindImpl's constructor
+ * A type class that creates a NodeSeq=>Seq[NodeSeq] for a value of some type.
+ * The apply method delegates to the function passed to the constructor.
+ * @param f a function T=>NodeSeq=>Seq[NodeSeq] that returns a NodeSeq=>NodeSeq for a T
  */
-class CanBind[-T](val apply: Box[String] => Box[CssSelector] => T => CssSel)
+class CanBindN[-T](f: T => NodeSeq => Seq[NodeSeq]) extends (T => NodeSeq => Seq[NodeSeq]) {
+  /**
+   * Given a value of type T, return a function that can be used in Lift binding.
+   * The function takes a NodeSeq (the content from the template) and returns
+   * a Seq[NodeSeq]. The return value is collection-valued because some types repeatedly
+   * transform the same template content (e.g., "th *" #> List("Column Header 1", "Column Header 2"))
+   */
+  def apply(v: T) = f(v)
+}
+
+/**
+ * Defines the CanBindN implicits that are available by default
+ */
+object CanBindN {
+  /**
+   * Bind a single bindable value.
+   * Given a type that has an implicit CanBind, delegate to that CanBind,
+   * wrapping the result in a List is its single element
+   */
+  implicit def single[T](implicit canBind: CanBind[T]): CanBindN[T] =
+    new CanBindN[T](v => ns => List(canBind(v)(ns)))
+
+  /**
+   * Bind zero or more bindable values.
+   * Given a type that has an implicit CanBind, and a context viewable as an
+   * Iterable of that type, apply all the CanBinds
+   */
+  implicit def iterable[T, I[_]](implicit canBind: CanBind[T], toIter: I[T]=>Iterable[T]): CanBindN[I[T]] =
+    new CanBindN[I[T]](v => ns => toIter(v).toSeq map (_ apply ns))
+
+  /**
+   * Bind a function that, given a NodeSeq, returns zero or more bindable values.
+   * Given a type that has an implicit CanBindN, and a context viewable as an
+   * Iterable of that type, apply all the CanBindNs.
+   */
+  implicit def iterableFunc[T, I[_]](implicit canBindN: CanBindN[T], toIter: I[T]=>Iterable[T]): CanBindN[NodeSeq=>I[T]] =
+    new CanBindN[NodeSeq=>I[T]](v => ns => toIter(v(ns)).toSeq flatMap (_ apply ns))
+}
+
+class CanBind[-T](f: T => NodeSeq => NodeSeq) extends (T => NodeSeq => NodeSeq) {
+  def apply(v: T) = f(v)
+}
+
+//TODO obviate StringPromotable
+//TODO obviate Bindable
 
 object CanBind {
   /**
-   * Inserts a String constant according to the CssSelector rules
+   * Bind a string by replacing content with a Text node (or NodeSeq.empty in the case of null)
    */
-  implicit val string = new CanBind[String](stringSelector => css => str =>
-    new CssBindImpl(stringSelector, css) {
-      def calculate(in: NodeSeq): Seq[NodeSeq] =
-        List(if (null eq str) NodeSeq.Empty else Text(str))
-    }
-  )
+  implicit val string = new CanBind[String](str => _ => (if (null eq str) NodeSeq.Empty else Text(str)))
 
   /**
-   * Inserts a NodeSeq constant according to the CssSelector rules
+   * Bind a NodeSeq by replacing content with it
    */
-  implicit val nodeSeq = new CanBind[NodeSeq](stringSelector => css => ns =>
-    new CssBindImpl(stringSelector, css) {
-      def calculate(in: NodeSeq): Seq[NodeSeq] = List(ns)
-    }
-  )
+  implicit val nodeSeq: CanBind[NodeSeq] = new CanBind[NodeSeq](ns => _ => ns)
 
   /**
-   * A function that transforms the content according to the CssSelector rules
+   * Bind a Seq[Node] by replacing content with it, via NodeSeq.fromSeq
    */
-  implicit val nodeSeqFunc = new CanBind[NodeSeq=>NodeSeq](stringSelector => css => nsFunc =>
-    new CssBindImpl(stringSelector, css) {
-      def calculate(in: NodeSeq): Seq[NodeSeq] = List(nsFunc(in))
-    }
-  )
+  implicit val seqNode: CanBind[Seq[Node]] = new CanBind[Seq[Node]](ns => _ => NodeSeq fromSeq ns)
 
   /**
-   * Inserts a Bindable constant according to the CssSelector rules.
+   * Bind a function NodeSeq=>U where U has an implicit CanBind, by applying it
+   * to content and replacing it with the result
+   */
+  implicit def func[U](implicit canBind: CanBind[U]): CanBind[NodeSeq => U] =
+    new CanBind[NodeSeq => U](f => in => f(in) apply in)
+
+  /**
+   * Bind an object that extends Bindable, by calling its asHtml method
+   * and replacing content with its result.
    * Mapper and Record fields implement Bindable.
    */
-  implicit val bindable = new CanBind[Bindable](stringSelector => css => bindable =>
-    new CssBindImpl(stringSelector, css) {
-      def calculate(in: NodeSeq): Seq[NodeSeq] = List(bindable.asHtml)
-    }
-  )
+  implicit val bindable: CanBind[Bindable] = new CanBind[Bindable](bindable => _ => bindable.asHtml)
 
   /**
-   * Inserts a StringPromotable constant according to the CssSelector rules.
+   * Bind something that has a conversion to StringPromotable, by
+   * calling the StringPromotable's toString method and replacing content with it wrapped in a Text node.
    * StringPromotable includes Int, Long, Boolean, and Symbol
    */
-  implicit def stringPromotable[T<%StringPromotable] = new CanBind[T](stringSelector => css => strPromo =>
-    new CssBindImpl(stringSelector, css) {
-      def calculate(in: NodeSeq): Seq[NodeSeq] =
-        List(Text(strPromo.toString))
-    }
-  )
+  implicit def stringPromotable[T](implicit view: T=>StringPromotable) = new CanBind[T](strPromo => _ => Text(view(strPromo).toString))
 
-  /**
-   * Applies the N constants according to the CssSelector rules.
-   * This allows for Seq[String], Seq[NodeSeq], Box[String],
-   * Box[NodeSeq], Option[String], Option[NodeSeq]
-   */
-  implicit def iterableConst[T<%IterableConst] = new CanBind[T](stringSelector => css => itrConst =>
-    new CssBindImpl(stringSelector, css) {
-      def calculate(in: NodeSeq): Seq[NodeSeq] = itrConst.constList(in)
-    }
-  )
 
-  /**
-   * Apply the function and then apply the results account the the CssSelector
-   * rules.
-   * This allows for NodeSeq => Seq[String], NodeSeq =>Seq[NodeSeq],
-   * NodeSeq => Box[String],
-   * NodeSeq => Box[NodeSeq], NodeSeq => Option[String],
-   * NodeSeq =>Option[NodeSeq]
-   */
-  implicit def iterableFunc[T<%IterableFunc] = new CanBind[T](stringSelector => css => itrFunc =>
-    new CssBindImpl(stringSelector, css) {
-      def calculate(in: NodeSeq): Seq[NodeSeq] = itrFunc(in)
-    }
-  )
 }
+
 
 
 /**
@@ -114,8 +125,11 @@ object CanBind {
  * @param css the parsed CssSelector object
  */
 final class ToCssBindPromoter(stringSelector: Box[String], css: Box[CssSelector]) {
-  def #>[T](v: T)(implicit canBind: CanBind[T]): CssSel = canBind.apply(stringSelector)(css)(v)
-  def replaceWith[T: CanBind](v: T): CssSel = #>[T](v)
+  def #>[T](v: T)(implicit canBindN: CanBindN[T]): CssSel =
+    new CssBindImpl(stringSelector, css) {
+      def calculate(in: NodeSeq): Seq[NodeSeq] = canBindN.apply(v)(in)
+    }
+  def replaceWith[T: CanBindN](v: T): CssSel = #>[T](v)
 }
 
 
@@ -196,6 +210,7 @@ object IterableConst {
 
   /**
    * Converts anything that can be converted into an Box[NodeSeq]
+   * Bind a value that has a CanBindN implicit available
    */
   implicit def boxNodeSeq(it: Box[NodeSeq]): IterableConst =
     NodeSeqIterableConst(it.toList)
@@ -210,6 +225,7 @@ object IterableConst {
    * Converts anything that can be converted into an Iterable[NodeSeq]
    * into an IterableConst.  This includes Seq[NodeSeq], Option[NodeSeq],
    * and Box[NodeSeq]
+   * Bind a value that has a CanBindN implicit available
    */
   implicit def itNodeSeq(it: JavaList[NodeSeq]): IterableConst =
     new NodeSeqIterableConst(it)
@@ -304,6 +320,10 @@ object IterableFunc {
 trait StringPromotable
 
 object StringPromotable {
+  implicit def hasStringConversion[T <% String](in: T): StringPromotable =
+    new StringPromotable {
+      override val toString: String = in
+    }
   implicit def jsCmdToStrPromo(in: ToJsCmd): StringPromotable =
     new StringPromotable {
       override val toString = in.toJsCmd
