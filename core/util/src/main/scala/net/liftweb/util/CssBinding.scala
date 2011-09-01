@@ -25,134 +25,99 @@ import scala.collection.mutable.ListBuffer
 
 
 /**
+ * A type class that creates CssSel instances for a value of some type
+ * @param apply a function stringSelector => css => x => cssSel. stringSelector and css are the arguments for CssBindImpl's constructor
+ */
+class CanBind[-T](val apply: Box[String] => Box[CssSelector] => T => CssSel)
+
+object CanBind {
+  /**
+   * Inserts a String constant according to the CssSelector rules
+   */
+  implicit val string = new CanBind[String](stringSelector => css => str =>
+    new CssBindImpl(stringSelector, css) {
+      def calculate(in: NodeSeq): Seq[NodeSeq] =
+        List(if (null eq str) NodeSeq.Empty else Text(str))
+    }
+  )
+
+  /**
+   * Inserts a NodeSeq constant according to the CssSelector rules
+   */
+  implicit val nodeSeq = new CanBind[NodeSeq](stringSelector => css => ns =>
+    new CssBindImpl(stringSelector, css) {
+      def calculate(in: NodeSeq): Seq[NodeSeq] = List(ns)
+    }
+  )
+
+  /**
+   * A function that transforms the content according to the CssSelector rules
+   */
+  implicit val nodeSeqFunc = new CanBind[NodeSeq=>NodeSeq](stringSelector => css => nsFunc =>
+    new CssBindImpl(stringSelector, css) {
+      def calculate(in: NodeSeq): Seq[NodeSeq] = List(nsFunc(in))
+    }
+  )
+
+  /**
+   * Inserts a Bindable constant according to the CssSelector rules.
+   * Mapper and Record fields implement Bindable.
+   */
+  implicit val bindable = new CanBind[Bindable](stringSelector => css => bindable =>
+    new CssBindImpl(stringSelector, css) {
+      def calculate(in: NodeSeq): Seq[NodeSeq] = List(bindable.asHtml)
+    }
+  )
+
+  /**
+   * Inserts a StringPromotable constant according to the CssSelector rules.
+   * StringPromotable includes Int, Long, Boolean, and Symbol
+   */
+  implicit def stringPromotable[T<%StringPromotable] = new CanBind[T](stringSelector => css => strPromo =>
+    new CssBindImpl(stringSelector, css) {
+      def calculate(in: NodeSeq): Seq[NodeSeq] =
+        List(Text(strPromo.toString))
+    }
+  )
+
+  /**
+   * Applies the N constants according to the CssSelector rules.
+   * This allows for Seq[String], Seq[NodeSeq], Box[String],
+   * Box[NodeSeq], Option[String], Option[NodeSeq]
+   */
+  implicit def iterableConst[T<%IterableConst] = new CanBind[T](stringSelector => css => itrConst =>
+    new CssBindImpl(stringSelector, css) {
+      def calculate(in: NodeSeq): Seq[NodeSeq] = itrConst.constList(in)
+    }
+  )
+
+  /**
+   * Apply the function and then apply the results account the the CssSelector
+   * rules.
+   * This allows for NodeSeq => Seq[String], NodeSeq =>Seq[NodeSeq],
+   * NodeSeq => Box[String],
+   * NodeSeq => Box[NodeSeq], NodeSeq => Option[String],
+   * NodeSeq =>Option[NodeSeq]
+   */
+  implicit def iterableFunc[T<%IterableFunc] = new CanBind[T](stringSelector => css => itrFunc =>
+    new CssBindImpl(stringSelector, css) {
+      def calculate(in: NodeSeq): Seq[NodeSeq] = itrFunc(in)
+    }
+  )
+}
+
+
+/**
  * An intermediate class used to promote a String or a CssSelector to
  * something that can be associated with a value to apply to the selector
+ * @param stringSelector the unparsed css selector string
+ * @param css the parsed CssSelector object
  */
 final class ToCssBindPromoter(stringSelector: Box[String], css: Box[CssSelector]) {
-
-  /**
-   * Inserts a String constant according to the CssSelector rules
-   */
-  def #>(str: String): CssSel = new CssBindImpl(stringSelector, css) {
-    def calculate(in: NodeSeq): Seq[NodeSeq] =
-      List(if (null eq str) NodeSeq.Empty else Text(str))
-  }
-
-
-  /**
-   * Inserts a NodeSeq constant according to the CssSelector rules
-   */
-  def #>(ns: NodeSeq): CssSel = new CssBindImpl(stringSelector, css) {
-    def calculate(in: NodeSeq): Seq[NodeSeq] = List(ns)
-  }
-
-  /**
-   * A function that transforms the content according to the CssSelector rules
-   */
-  def #>(nsFunc: NodeSeq => NodeSeq): CssSel = new CssBindImpl(stringSelector, css) {
-    def calculate(in: NodeSeq): Seq[NodeSeq] = List(nsFunc(in))
-  }
-
-  /**
-   * Inserts a Bindable constant according to the CssSelector rules.
-   * Mapper and Record fields implement Bindable.
-   */
-  def #>(bindable: Bindable): CssSel = new CssBindImpl(stringSelector, css) {
-    def calculate(in: NodeSeq): Seq[NodeSeq] = List(bindable.asHtml)
-  }
-
-  /**
-   * Inserts a StringPromotable constant according to the CssSelector rules.
-   * StringPromotable includes Int, Long, Boolean, and Symbol
-   */
-  def #>(strPromo: StringPromotable): CssSel = new CssBindImpl(stringSelector, css) {
-    def calculate(in: NodeSeq): Seq[NodeSeq] =
-      List(Text(strPromo.toString))
-  }
-
-  /**
-   * Applies the N constants according to the CssSelector rules.
-   * This allows for Seq[String], Seq[NodeSeq], Box[String],
-   * Box[NodeSeq], Option[String], Option[NodeSeq]
-   */
-  def #>(itrConst: IterableConst): CssSel = new CssBindImpl(stringSelector, css) {
-    def calculate(in: NodeSeq): Seq[NodeSeq] = itrConst.constList(in)
-  }
-
-  /**
-   * Apply the function and then apply the results account the the CssSelector
-   * rules.
-   * This allows for NodeSeq => Seq[String], NodeSeq =>Seq[NodeSeq],
-   * NodeSeq => Box[String],
-   * NodeSeq => Box[NodeSeq], NodeSeq => Option[String],
-   * NodeSeq =>Option[NodeSeq]
-   */
-  def #>(itrFunc: IterableFunc): CssSel = new CssBindImpl(stringSelector, css) {
-    def calculate(in: NodeSeq): Seq[NodeSeq] = itrFunc(in)
-  }
-
-  /**
-   * Inserts a String constant according to the CssSelector rules
-   */
-  def replaceWith(str: String): CssSel = new CssBindImpl(stringSelector, css) {
-    def calculate(in: NodeSeq): Seq[NodeSeq] =
-      List(if (null eq str) NodeSeq.Empty else Text(str))
-  }
-
-  /**
-   * Inserts a NodeSeq constant according to the CssSelector rules
-   */
-  def replaceWith(ns: NodeSeq): CssSel = new CssBindImpl(stringSelector, css) {
-    def calculate(in: NodeSeq): Seq[NodeSeq] = List(ns)
-  }
-
-  /**
-   * A function that transforms the content according to the CssSelector rules
-   */
-  def replaceWith(nsFunc: NodeSeq => NodeSeq): CssSel = new CssBindImpl(stringSelector, css) {
-    def calculate(in: NodeSeq): Seq[NodeSeq] = List(nsFunc(in))
-  }
-
-  /**
-   * Inserts a Bindable constant according to the CssSelector rules.
-   * Mapper and Record fields implement Bindable.
-   */
-  def replaceWith(bindable: Bindable): CssSel = new CssBindImpl(stringSelector, css) {
-    def calculate(in: NodeSeq): Seq[NodeSeq] = List(bindable.asHtml)
-  }
-
-  /**
-   * Inserts a StringPromotable constant according to the CssSelector rules.
-   * StringPromotable includes Int, Long, Boolean, and Symbol
-   */
-  def replaceWith(strPromo: StringPromotable): CssSel = new CssBindImpl(stringSelector, css) {
-    def calculate(in: NodeSeq): Seq[NodeSeq] = strPromo.toString match {
-      case null => NodeSeq.Empty
-      case str => List(Text(str))
-    }
-  }
-
-  /**
-   * Applies the N constants according to the CssSelector rules.
-   * This allows for Seq[String], Seq[NodeSeq], Box[String],
-   * Box[NodeSeq], Option[String], Option[NodeSeq]
-   */
-  def replaceWith(itrConst: IterableConst): CssSel = new CssBindImpl(stringSelector, css) {
-    def calculate(in: NodeSeq): Seq[NodeSeq] = itrConst.constList(in)
-  }
-
-  /**
-   * Apply the function and then apply the results account the the CssSelector
-   * rules.
-   * This allows for NodeSeq => Seq[String], NodeSeq =>Seq[NodeSeq],
-   * NodeSeq => Box[String],
-   * NodeSeq => Box[NodeSeq], NodeSeq => Option[String],
-   * NodeSeq =>Option[NodeSeq]
-   */
-  def replaceWith(itrFunc: IterableFunc): CssSel = new CssBindImpl(stringSelector, css) {
-    def calculate(in: NodeSeq): Seq[NodeSeq] = itrFunc(in)
-  }
+  def #>[T](v: T)(implicit canBind: CanBind[T]): CssSel = canBind.apply(stringSelector)(css)(v)
+  def replaceWith[T: CanBind](v: T): CssSel = #>[T](v)
 }
+
 
 /**
  * A trait that has some helpful implicit conversions from
@@ -999,8 +964,7 @@ sealed trait CssBind extends CssSel {
   def stringSelector: Box[String]
   def css: Box[CssSelector]
 
-  override def toString(): String = "CssBind("+stringSelector+", "+
-  css+")"
+  override def toString(): String = "CssBind("+stringSelector+", "+css+")"
 
   def apply(in: NodeSeq): NodeSeq = css match {
     case Full(c) => selectorMap(in)
