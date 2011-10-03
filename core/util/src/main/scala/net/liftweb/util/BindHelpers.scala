@@ -1338,7 +1338,7 @@ trait BindHelpers {
     new ToCssBindPromoter(Full(str), CssSelectorParser.parse(str))
 
   /**
-   * promote a String to a ToCssBindPromotor
+   * promote a CssSelector to a ToCssBindPromotor
    */
   implicit def cssSelectorToCssBindPromoter(sel: CssSelector): ToCssBindPromoter =
     new ToCssBindPromoter(Empty, Full(sel))
