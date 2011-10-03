@@ -111,7 +111,12 @@ object CanBind {
    * calling the StringPromotable's toString method and replacing content with it wrapped in a Text node.
    * StringPromotable includes Int, Long, Boolean, and Symbol
    */
-  implicit def stringPromotable[T](implicit view: T=>StringPromotable) = new CanBind[T](strPromo => _ => Text(view(strPromo).toString))
+  implicit def stringPromotable[T](implicit view: T=>StringPromotable) = new CanBind[T]({strPromo => _ =>
+    view(strPromo).toString match {
+      case null => NodeSeq.Empty
+      case s => Text(s)
+    }
+  })
 
 
 }
