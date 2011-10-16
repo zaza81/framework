@@ -58,7 +58,7 @@ object CanBindN {
    * Iterable of that type, apply all the CanBinds
    */
   implicit def iterable[T, I[_]](implicit canBind: CanBind[T], toIter: I[T]=>Iterable[T]): CanBindN[I[T]] =
-    new CanBindN[I[T]](v => ns => toIter(v).toSeq map (_ apply ns))
+    new CanBindN[I[T]](v => ns => Helpers.ensureUniqueId(toIter(v).toSeq map (_ apply ns)))
 
   /**
    * Bind a function that, given a NodeSeq, returns zero or more bindable values.
