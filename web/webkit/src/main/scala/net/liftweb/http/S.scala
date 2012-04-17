@@ -2276,7 +2276,11 @@ for {
     val old = _currentSnippet.is
     try {
       _currentSnippet.set(Full(name))
-      f
+      val time = System.currentTimeMillis
+      val ret = f
+      val took = System.currentTimeMillis - time
+      if(took > 50 && name != "surround")  logger.trace(" %s took:%sms".format(name, took))
+      ret
     } finally {
       _currentSnippet.set(old)
     }
