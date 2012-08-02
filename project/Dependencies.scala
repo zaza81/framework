@@ -48,6 +48,7 @@ object Dependencies {
   lazy val scalaz_core: ModuleMap = sv => scalazGroup(sv)        % "scalaz-core"        % scalazVersion(sv) cross CVMappingAll
   lazy val slf4j_api              = "org.slf4j"                  % "slf4j-api"          % slf4jVersion
   lazy val squeryl                = "org.squeryl"                % "squeryl"            % "0.9.5-1" cross crossMapped("2.9.1-1" -> "2.9.1", "2.8.2" -> "2.8.1")
+  @deprecated lazy val scalaactors= "org.scala-lang"             % "scala-actors"       % "2.10.0-M6"
 
   // Aliases
   lazy val mongo_driver = mongo_java_driver
