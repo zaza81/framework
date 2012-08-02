@@ -121,7 +121,7 @@ object SerializationExamples extends Specification {
   }
 
   "Case class from type constructors example" in {
-    val p = ProperType(TypeConstructor(Chicken(10)), (25, Player("joe")))
+    val p = ProperType(TypeConstructor(Chicken(10)), Pair(25, Player("joe")))
     val ser = swrite(p)
     read[ProperType](ser) mustEqual p
   }
@@ -374,4 +374,5 @@ case class OptionOfTupleOfDouble(position: Option[Tuple2[Double, Double]])
 
 case class Player(name: String)
 case class TypeConstructor[A](x: A)
-case class ProperType(x: TypeConstructor[Chicken], t: (Int, Player))
+case class Pair[A, B](fst: A, snd: B)
+case class ProperType(x: TypeConstructor[Chicken], t: Pair[Int, Player])
