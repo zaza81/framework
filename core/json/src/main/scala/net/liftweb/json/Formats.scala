@@ -157,7 +157,7 @@ trait TypeHints {
   /**
    * Adds the specified type hints to this type hints.
    */
-  def + (hints: TypeHints): TypeHints = CompositeTypeHints(hints.components ::: components)
+  def + (hints: TypeHints): TypeHints = CompositeTypeHints(components ::: hints.components)
 
   private[TypeHints] case class CompositeTypeHints(override val components: List[TypeHints]) extends TypeHints {
     val hints: List[Class[_]] = components.flatMap(_.hints)
