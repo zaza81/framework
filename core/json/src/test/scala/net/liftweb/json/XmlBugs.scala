@@ -55,7 +55,7 @@ object XmlBugs extends Specification {
     val expected    = """{"root":{"n":[{"x":"abc","id":"10"},{"x":"bcd","id":"11"}]}}"""
     val expected210 = """{"root":{"n":[{"id":"10","x":"abc"},{"id":"11","x":"bcd"}]}}"""
     val json = Printer.compact(render(toJson(xml)))
-    (json mustEqual expected) or (json mustEqual expected210)
+    (json == expected || json == expected210) mustEqual true
   }
 
   "XML with empty node is converted correctly to JSON" in {
