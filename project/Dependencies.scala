@@ -80,7 +80,7 @@ object Dependencies {
   lazy val jetty6      = "org.mortbay.jetty"           % "jetty"                    % "6.1.26"     % "test"
   lazy val jwebunit    = "net.sourceforge.jwebunit"    % "jwebunit-htmlunit-plugin" % "2.5"        % "test"
   lazy val mockito_all = "org.mockito"                 % "mockito-all"              % "1.9.0"      % "test"
-  lazy val scalacheck =  "org.scalacheck"              % "scalacheck"               % "1.10.0"     % "test" cross CVMappingAll
-  lazy val specs2 =      "org.specs2"                  % "specs2"                   % "1.12.1.1"   % "test" cross CVMappingAll
+  lazy val scalacheck =  "org.scalacheck"             %% "scalacheck"               % "1.10.0"     % "test" cross CrossVersion.full
+  lazy val specs2: ModuleMap = "org.specs2"     % "specs2" % defaultOrMapped("1.12.1","2.10.0-M7"->"1.12.1.1")(_)        cross CrossVersion.full
 
 }
