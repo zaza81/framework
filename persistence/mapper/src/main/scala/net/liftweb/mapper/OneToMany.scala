@@ -26,13 +26,13 @@ package mapper
  * @author nafg
  */
 trait OneToMany[K,T<:KeyedMapper[K, T]] extends KeyedMapper[K,T] { this: T =>
-  private[mapper] lazy val oneToManyFields: List[MappedOneToManyBase[_]] = {
-    new FieldFinder[MappedOneToManyBase[_]](
+  private[mapper] lazy val oneToManyFields: List[MappedOneToManyBase[_ <: Mapper[_]]] = {
+    new FieldFinder[MappedOneToManyBase[_ <: Mapper[_]]](
       getSingleton,
       net.liftweb.common.Logger(classOf[OneToMany[K,T]])
-    ).accessorMethods map (_.invoke(this).asInstanceOf[MappedOneToManyBase[_]])
+    ).accessorMethods map (_.invoke(this).asInstanceOf[MappedOneToManyBase[_ <: Mapper[_]]])
   }
-  
+
   /**
    * An override for save to propagate the save to all children
    * of this parent.
@@ -52,9 +52,10 @@ trait OneToMany[K,T<:KeyedMapper[K, T]] extends KeyedMapper[K,T] { this: T =>
    * If they are all successful returns true.
    */
   override def delete_! = DB.use(connectionIdentifier){_ =>
-    if(oneToManyFields.forall{
-      case f: Cascade[_] => f.delete_!
-      case _ => true
+    if(oneToManyFields.forall{(_: MappedOneToManyBase[_ <: Mapper[_]]) match {
+        case f: Cascade[_] => f.delete_!
+        case _ => true
+      }
     })
       super.delete_!
     else {
@@ -97,7 +98,7 @@ trait OneToMany[K,T<:KeyedMapper[K, T]] extends KeyedMapper[K,T] { this: T =>
    * @param foreign A function that gets the MappedForeignKey on the child that refers to this parent
    */
   class MappedOneToManyBase[O <: Mapper[_]](val reloadFunc: ()=>Seq[O],
-                                      val foreign: O => MappedForeignKey[K,_,T]) extends scala.collection.mutable.Buffer[O] {
+                                      val foreign: O => MappedForeignKey[K,X,T] forSome { type X <: Mapper[X] }) extends scala.collection.mutable.Buffer[O] {
     private var inited = false
     private var _delegate: List[O] = _
     /**
@@ -118,7 +119,7 @@ trait OneToMany[K,T<:KeyedMapper[K, T]] extends KeyedMapper[K,T] { this: T =>
      */
     protected def own(e: O) = {
       foreign(e) match {
-        case f: MappedLongForeignKey[O,T] with MappedForeignKey[_,_,T] =>
+        case f: MappedLongForeignKey[O,T] with MappedForeignKey[K,_,T] =>
           f.apply(OneToMany.this)
         case f =>
           f.set(OneToMany.this.primaryKeyField.get)
