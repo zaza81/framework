@@ -14,7 +14,7 @@ organizationName in ThisBuild      := "WorldWide Conferencing, LLC"
 
 crossScalaVersions in ThisBuild    := Seq("2.10.0-RC1", "2.9.2", "2.9.1-1", "2.9.1")
 
-scalaBinaryVersion                 <<= scalaVersion
+scalaBinaryVersion in ThisBuild   <<= scalaVersion
 
 libraryDependencies in ThisBuild <++= scalaVersion {sv => Seq(specs2(sv), scalacheck) }
 
@@ -27,6 +27,6 @@ scmInfo in ThisBuild               := Some(ScmInfo(url("https://github.com/lift/
 
 pomExtra in ThisBuild              ~= (_ ++ {Developers.toXml})
 
-credentials in ThisBuild <+= state map { s => Credentials(BuildPaths.getGlobalSettingsDirectory(s, BuildPaths.getGlobalBase(s)) / ".credentials") }
+credentials in ThisBuild          <+= state map { s => Credentials(BuildPaths.getGlobalSettingsDirectory(s, BuildPaths.getGlobalBase(s)) / ".credentials") }
 
-initialize <<= (name, version, scalaVersion) apply printLogo
+initialize                        <<= (name, version, scalaVersion) apply printLogo
