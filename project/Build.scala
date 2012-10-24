@@ -93,7 +93,7 @@ object BuildDef extends Build {
                   libraryDependencies <++= scalaVersion { sv =>
                     Seq(commons_fileupload, servlet_api, specs2(sv).copy(configurations = Some("provided")), jetty6, jwebunit)
                   },
-                  libraryDependencies <++= scalaVersion { case "2.10.0-M7" => scalaactors::Nil  case _ => Nil },
+                  libraryDependencies <++= scalaVersion { case s if s startsWith "2.10" => scalaactors(s)::Nil  case _ => Nil },
                   initialize in Test <<= (sourceDirectory in Test) { src =>
                     System.setProperty("net.liftweb.webapptest.src.test.webapp", (src / "webapp").absString)
                   })

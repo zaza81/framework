@@ -48,7 +48,7 @@ object Dependencies {
   lazy val scalaz_core: ModuleMap = sv => scalazGroup(sv)        % "scalaz-core"        % scalazVersion(sv) cross CVMappingAll
   lazy val slf4j_api              = "org.slf4j"                  % "slf4j-api"          % slf4jVersion
   lazy val squeryl                = "org.squeryl"                % "squeryl"            % "0.9.5-1" cross crossMapped("2.9.1-1" -> "2.9.1", "2.8.2" -> "2.8.1")
-  @deprecated lazy val scalaactors= "org.scala-lang"             % "scala-actors"       % "2.10.0-M7"
+  @deprecated lazy val scalaactors= {v: String => "org.scala-lang" % "scala-actors"    % v }
 
   // Aliases
   lazy val mongo_driver = mongo_java_driver
@@ -81,6 +81,6 @@ object Dependencies {
   lazy val jwebunit    = "net.sourceforge.jwebunit"    % "jwebunit-htmlunit-plugin" % "2.5"        % "test"
   lazy val mockito_all = "org.mockito"                 % "mockito-all"              % "1.9.0"      % "test"
   lazy val scalacheck =  "org.scalacheck"             %% "scalacheck"               % "1.10.0"     % "test" cross CrossVersion.full
-  lazy val specs2: ModuleMap = "org.specs2"     % "specs2" % defaultOrMapped("1.12.1","2.10.0-M7"->"1.12.1.1")(_)        cross CrossVersion.full
+  lazy val specs2: ModuleMap = "org.specs2"     % "specs2" % defaultOrMapped("1.12.1","2.10.0-RC1"->"1.12.2")(_)        cross CrossVersion.full
 
 }
