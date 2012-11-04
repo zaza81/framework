@@ -433,7 +433,7 @@ private[http] object RenderVersion {
 }
 
 /**
- * A trait defining how stateful the session is 
+ * A trait defining how stateful the session is
  */
 trait HowStateful {
   private val howStateful = new ThreadGlobal[Boolean]
@@ -527,13 +527,10 @@ private[http] final case class AjaxRequestInfo(requestVersion: Long,
  */
 class LiftSession(private[http] val _contextPath: String, val uniqueId: String,
                   val httpSession: Box[HTTPSession]) extends LiftMerge with Loggable with HowStateful {
-  val sessionHtmlProperties: SessionVar[HtmlProperties] =
-    new SessionVar[HtmlProperties](LiftRules.htmlProperties.vend(
-      S.request openOr Req.nil
-    )) {}
+  def sessionHtmlProperties = LiftRules.htmlProperties.session.is.make openOr LiftRules.htmlProperties.default.is.vend
 
   val requestHtmlProperties: TransientRequestVar[HtmlProperties] =
-    new TransientRequestVar[HtmlProperties](sessionHtmlProperties.is) {}
+    new TransientRequestVar[HtmlProperties](sessionHtmlProperties(S.request openOr Req.nil)) {}
 
   @volatile
   private[http] var markedForTermination = false
@@ -635,7 +632,7 @@ class LiftSession(private[http] val _contextPath: String, val uniqueId: String,
 
     lastServiceTime = millis
     LiftSession.onSetupSession.foreach(_(this))
-    sessionHtmlProperties.is // cause the properties to be calculated
+    sessionHtmlProperties // cause the properties to be calculated
   }
 
   def running_? = _running_?
@@ -1670,7 +1667,7 @@ class LiftSession(private[http] val _contextPath: String, val uniqueId: String,
             val ret = findSnippetInstance(nameToTry)
             // Update the snippetMap so that we reuse the same instance in this request (unless the snippet is transient)
             ret.filter(TransientSnippet.notTransient(_)).foreach(s => snippetMap.set(snippetMap.is.updated(tagName, s)))
-            
+
             ret
         }
       }
@@ -1696,7 +1693,7 @@ class LiftSession(private[http] val _contextPath: String, val uniqueId: String,
             runWhitelist(snippet, cls, method, kids){(S.locateMappedSnippet(snippet).map(_(kids)) or
               locSnippet(snippet)).openOr(
               S.locateSnippet(snippet).map(_(kids)) openOr {
-                
+
                 (locateAndCacheSnippet(cls)) match {
                   // deal with a stateless request when a snippet has
                   // different behavior in stateless mode
@@ -1838,7 +1835,7 @@ class LiftSession(private[http] val _contextPath: String, val uniqueId: String,
             e.snippetFailure,
             e.buildStackTrace,
             wholeTag)
-          
+
         case e: SnippetFailureException =>
           reportSnippetError(page, snippetName,
             e.snippetFailure,
