@@ -1225,11 +1225,19 @@ class LiftSession(private[http] val _contextPath: String, val uniqueId: String,
 
                 PageName(request.uri + " -> " + request.path)
                 LiftRules.allowParallelSnippets.doWith(() => !Props.inGAE) {
-                  (request.location.flatMap(_.earlyResponse) or LiftRules.earlyResponse.firstFull(request)) or
-                    (processTemplate(locTemplate, request, request.path, 200) or
+                  (request.location.flatMap(_.earlyResponse) or LiftRules.earlyResponse.firstFull(request)) match {
+                    case earlyResponse @ Full(_) =>
+                      earlyResponse
+
+                    case _ if request.location.flatMap(_.currentValue).isDefined =>
+                      processTemplate(locTemplate, request, request.path, 200)
+
+                    case _ =>
+                      // There was no early response and we had no current value.
                       request.createNotFound {
                         processTemplate(Empty, request, _, 404)
-                      })
+                      }
+                  }
                 }
               }
 

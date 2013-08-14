@@ -156,7 +156,7 @@ trait Loc[T] {
 
   override def toString = "Loc("+name+", "+link+", "+text+", "+params+")"
 
-  type LocRewrite =  Box[PartialFunction[RewriteRequest, (RewriteResponse, T)]]
+  type LocRewrite =  Box[PartialFunction[RewriteRequest, (RewriteResponse, Box[T])]]
 
   def rewrite: LocRewrite = Empty
 
@@ -172,7 +172,7 @@ trait Loc[T] {
 
       def apply(in: RewriteRequest): RewriteResponse = {
         val (ret, param) = rw.apply(in)
-        requestValue.set(Full(param))
+        requestValue.set(param)
         ret
       }
     }
@@ -383,13 +383,13 @@ trait Loc[T] {
   }
 
   def doesMatch_?(req: Req): Boolean = {
-    (if (link.isDefinedAt(req)) {
+    if (link.isDefinedAt(req)) {
       link(req) match {
         case Full(x) if testAllParams(allParams, req) => x
         case Full(x) => false
         case x => x.openOr(false)
       }
-    } else false) && currentValue.isDefined
+    } else false
     // the loc only matches if we've got a current value
   }
 

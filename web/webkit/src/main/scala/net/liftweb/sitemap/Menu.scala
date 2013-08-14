@@ -372,13 +372,12 @@ object Menu extends MenuSingleton {
     def listToFrom(in: List[String]): Box[ConvertFrom]
 
     object ExtractSan {
-      def unapply(in: List[String]): Option[(List[String], ConvertTo)] 
+      def unapply(in: List[String]): Option[(List[String], Box[ConvertTo])] 
       = {
         for {
           (path, paramList) <- extractAndConvertPath(in)
           toConvert <- listToFrom(paramList)
-          param <- parser(toConvert)
-        } yield path -> param
+        } yield path -> parser(toConvert)
       }
     }
 
@@ -599,9 +598,10 @@ case class Menu(loc: Loc[_], private val convertableKids: ConvertableToMenu*) ex
 
   def toMenu = this
 
-  def findLoc(req: Req): Box[Loc[_]] =
+  def findLoc(req: Req): Box[Loc[_]] = {
   if (loc.doesMatch_?(req)) Full(loc)
   else first(kids)(_.findLoc(req))
+}
 
   def locForGroup(group: String): Seq[Loc[_]] =
   (if (loc.inGroup_?(group)) List[Loc[_]](loc) else Nil) ++
