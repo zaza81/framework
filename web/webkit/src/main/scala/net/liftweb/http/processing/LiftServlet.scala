@@ -272,7 +272,7 @@ class LiftServlet extends Loggable {
             // back off more, the higher the count
             Thread.sleep(5 * recentlyChecked(theId))
             if (isComet)
-              js.JE.JsRaw(LiftRules.noCometSessionCmd.vend.toJsCmd + ";lift_toWatch = {};").cmd
+              js.JE.JsRaw(LiftRules.noCometSessionCmd.vend.toJsCmd + ";lift.setToWatch({});").cmd
             else
               js.JE.JsRaw(LiftRules.noAjaxSessionCmd.vend.toJsCmd).cmd
             }
@@ -736,8 +736,9 @@ class LiftServlet extends Loggable {
       }
 
     if (SessionMaster.isDead(sessionActor.uniqueId) || !sessionActor.stateful_? || actors.isEmpty) {
-      Left(Full(JsCommands(List(LiftRules.noCometSessionCmd.vend, js.JE.JsRaw("lift_toWatch = {};").cmd)).toResponse))
+      Left(Full(JsCommands(List(LiftRules.noCometSessionCmd.vend, js.JE.JsRaw("lift.setToWatch = {};").cmd)).toResponse))
     } else requestState.request.suspendResumeSupport_? match {
+
       case true => {
         setupContinuation(requestState, sessionActor, actors)
         Left(Full(EmptyResponse))
@@ -751,7 +752,7 @@ class LiftServlet extends Loggable {
 
   private def convertAnswersToCometResponse(session: LiftSession, ret: Seq[AnswerRender], actors: List[(LiftCometActor, Long)]): LiftResponse = {
     val ret2: List[AnswerRender] = ret.toList
-    val jsUpdateTime = ret2.map(ar => "if (lift_toWatch['" + ar.who.uniqueId + "'] !== undefined) lift_toWatch['" + ar.who.uniqueId + "'] = '" + ar.when + "';").mkString("\n")
+    val jsUpdateTime = ret2.map(ar => "lift.updWatch('" + ar.who.uniqueId + "', '" + ar.when + "');").mkString("\n")
     val jsUpdateStuff = ret2.map {
       ar => {
         val ret = ar.response.toJavaScript(session, ar.displayAll)

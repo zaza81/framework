@@ -657,7 +657,7 @@ class LiftRules() extends Factory with FormVendor with LazyLoggable {
   /**
    * Where to send the user if there's no comet session. Note that this is
    * contingent on an unchanged LiftRules.noCometSessionCommand and on
-   * liftComet.lift_sessionLost not being overridden client-side.
+   * lift.cometOnSessionLost not being overridden client-side.
    */
   @deprecated("Use LiftRules.noCometSessionCmd.", "2.5")
   @volatile var noCometSessionPage = "/"
@@ -669,17 +669,15 @@ class LiftRules() extends Factory with FormVendor with LazyLoggable {
    * request comes in for a session that has no associated comet actors
    * (this typically happens when the server restarts).
    *
-   * By default, we invoke liftComet.lift_sessionLost, which can be
+   * By default, we invoke lift.cometOnSessionLost, which can be
    * overridden client-side for more complex work.
-   * liftComet.lift_sessionLost redirects to
+   * lift.cometOnSessionLost redirects to
    * LiftRules.noCometSessionPage by default for now, though
    * noCometSessionPage is deprecated and will be replaced by a
    * default of reloading the current page.
    */
   val noCometSessionCmd = new FactoryMaker[JsCmd](
-    () => {
-      JsCmds.Run("liftComet.lift_sessionLost();")
-    }
+    () => JsCmds.Run("lift.cometOnSessionLost()")
   ) {}
 
   /**
@@ -687,14 +685,12 @@ class LiftRules() extends Factory with FormVendor with LazyLoggable {
    * session is considered lost when either an ajax request comes in for
    * a session that does not exist on the server.
    *
-   * By default, we invoke liftAjax.lift_sessionLost, which can be
+   * By default, we invoke lift.ajaxOnSessionLost, which can be
    * overridden client-side for more complex work.
-   * liftAjax.lift_sessionLost reloads the page by default.
+   * lift.ajaxOnSessionLost reloads the page by default.
    */
   val noAjaxSessionCmd = new FactoryMaker[JsCmd](
-    () => {
-      JsCmds.Run("liftAjax.lift_sessionLost();")
-    }
+    () => JsCmds.Run("lift.ajaxOnSessionLost()")
   ) {}
 
   /**
@@ -828,18 +824,18 @@ class LiftRules() extends Factory with FormVendor with LazyLoggable {
 
   /**
    * The JavaScript to execute to log a message on the client side when
-   * liftAjax.lift_logError is called.
+   * lift.logError is called.
    *
    * If Empty no logging is performed
-   * The default when running in DevMode is to call lift_defaultLogError which
+   * The default when running in DevMode is to call lift.logError which
    * will use JavaScript console if available or alert otherwise.
-   * 
+   *
    * To always use alert set:
    *
    *   LiftRules.jsLogFunc = Full(v => JE.Call("alert",v).cmd)
    */
   @volatile var jsLogFunc: Box[JsVar => JsCmd] =
-    if (Props.devMode) Full(v => JE.Call("liftAjax.lift_defaultLogError", v))
+    if (Props.devMode) Full(v => JE.Call("lift.logError", v))
     else Empty
 
   /**
@@ -1609,13 +1605,25 @@ class LiftRules() extends Factory with FormVendor with LazyLoggable {
   @volatile var autoIncludeComet: LiftSession => Boolean = session => true
 
   /**
-   * Tells Lift if the Ajax JavaScript should be included. By default it is set to true.
+   * Tells Lift if the Ajax/Comet JavaScript should be included. By default it is set to true.
    */
   @deprecated("Use autoIncludeAjaxCalc", "2.4")
   @volatile var autoIncludeAjax: LiftSession => Boolean = session => autoIncludeAjaxCalc.vend().apply(session)
 
-  val autoIncludeAjaxCalc: FactoryMaker[() => LiftSession => Boolean] = 
+  val autoIncludeAjaxCalc: FactoryMaker[() => LiftSession => Boolean] =
   new FactoryMaker(() => () => (session: LiftSession) => true) {}
+
+  /**
+   * Tells Lift if the Ajax/Comet JavaScript should be initialized with LiftRules via LiftJavaScript
+   */
+  val autoIncludeJSSettings: FactoryMaker[() => LiftSession => Boolean] =
+  new FactoryMaker(() => () => (session: LiftSession) => true) {}
+
+  /**
+   * Tells Lift which JavaScript settings to use.
+   */
+  val javascriptSettings: FactoryMaker[() => LiftSession => JsObj] =
+  new FactoryMaker(() => () => (session: LiftSession) => LiftJavaScript.settings) {}
 
   /**
    * Define the XHTML validator
@@ -1684,8 +1692,8 @@ class LiftRules() extends Factory with FormVendor with LazyLoggable {
    * caught exception.
    *
    * In development mode, this defaults to Full and the command within
-   * invokes liftComet.lift_cometError with the exception;
-   * lift_cometError rethrows the exception by default. In production
+   * invokes lift.cometOnError with the exception;
+   * lift.cometOnError rethrows the exception by default. In production
    * mode, this defaults to Empty.
    *
    * Note that if you set this to Full, it is highly advised that you
@@ -1699,7 +1707,7 @@ class LiftRules() extends Factory with FormVendor with LazyLoggable {
   val cometUpdateExceptionHandler: FactoryMaker[Box[JsCmd]] =
     new FactoryMaker[Box[JsCmd]]( () => {
       if (Props.devMode)
-        Full(JE.Call("liftComet.lift_cometError", JE.JsVar("e")).cmd)
+        Full(JE.Call("lift.cometOnError", JE.JsVar("e")).cmd)
       else
         Empty
     } ) {}
@@ -1709,7 +1717,7 @@ class LiftRules() extends Factory with FormVendor with LazyLoggable {
    */
   @volatile var renderCometPageContents: (LiftSession, Seq[CometVersionPair]) => JsCmd =
   (session, vp) => JsCmds.Run(
-    "var lift_toWatch = " + vp.map(p => p.guid.encJs + ": " + p.version).mkString("{", " , ", "}") + ";"
+    "window.lift.registerComet(" + vp.map(p => p.guid.encJs + ": " + p.version).mkString("{", " , ", "}") + ", '"+S.encodeURL(session.uniqueId)+"');"
     )
 
   /**
@@ -1798,7 +1806,7 @@ class LiftRules() extends Factory with FormVendor with LazyLoggable {
   /**
    * The name of the Ajax script that manages Ajax requests.
    */
-  @volatile var ajaxScriptName: () => String = () => "liftAjax.js"
+  @volatile var ajaxScriptName: () => String = () => "lift.js"
 
   /**
    * The name of the Comet script that manages Comet requests.
