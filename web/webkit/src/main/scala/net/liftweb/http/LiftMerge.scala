@@ -199,12 +199,17 @@ private[http] trait LiftMerge {
 
       val cometList = cometTimes.toList
 
-      if (LiftRules.autoIncludeJSSettings.vend().apply(this)) {
-        S.appendJs(LiftJavaScript.initCmd(LiftRules.javascriptSettings.vend().apply(this)))
-      }
-
-      if (!cometList.isEmpty && LiftRules.autoIncludeComet(this)) {
-        S.appendJs(LiftRules.renderCometPageContents(this, cometList))
+      // This needs to be first and outside of OnLoad
+      val initJs: JsCmd = {
+        (if (LiftRules.autoIncludeJSSettings.vend().apply(this))
+          LiftJavaScript.initCmd(LiftRules.javascriptSettings.vend().apply(this))
+        else
+          JsCmds.Noop) &
+        (if (!cometList.isEmpty && LiftRules.autoIncludeComet(this)) {
+          LiftRules.renderCometPageContents(this, cometList)
+        }
+        else
+          JsCmds.Noop)
       }
 
       if (LiftRules.enableLiftGC && stateful_?) {
@@ -216,10 +221,10 @@ private[http] trait LiftMerge {
           S.appendJs(JE.Call("window.lift.register"))
       }
 
-      S.jsToAppend match {
+      S.jsToAppend() match {
         case Nil =>
-        case x :: Nil => addlTail += js.JsCmds.Script(x)
-        case xs => addlTail += js.JsCmds.Script(xs.foldLeft(js.JsCmds.Noop)(_ & _))
+        //case x :: Nil => addlTail += js.JsCmds.Script(x)
+        case xs => addlTail += JsCmds.Script(xs.foldLeft(initJs)(_ & _))
       }
 
       for {
