@@ -2578,7 +2578,7 @@ trait S extends HasParams with Loggable with UserAgentCalculator {
                     future.satisfy(ret)
                     ret
                   } catch {
-                    case e => future.satisfy(e); throw e
+                    case e: Exception => future.satisfy(e); throw e
                   }
                 }
               }
@@ -2595,7 +2595,7 @@ trait S extends HasParams with Loggable with UserAgentCalculator {
                     future.satisfy(ret)
                     ret
                   } catch {
-                    case e => future.satisfy(e); throw e
+                    case e: Exception => future.satisfy(e); throw e
                   }
                 }
               }
@@ -2818,6 +2818,19 @@ trait S extends HasParams with Loggable with UserAgentCalculator {
         }
       }
     }
+  }
+
+  /**
+   * Maps a function that will be called with a parsed JValue and should
+   * return a JsCmd to be sent back to the browser. Note that if the
+   * passed JSON does not parse, the function will not be invoked.
+   */
+  def jsonFmapFunc[T](in: JValue => JsCmd)(f: String => T)(implicit dummy: AvoidTypeErasureIssues1): T = {
+    import json._
+
+    val name = formFuncName
+    addFunctionMap(name, SFuncHolder((s: String) => JsonParser.parseOpt(s).map(in) getOrElse JsCmds.Noop))
+    f(name)
   }
 
   /**

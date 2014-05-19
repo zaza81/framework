@@ -1,5 +1,5 @@
 /*
- * Copyright 2011 WorldWide Conferencing, LLC
+ * Copyright 2014 WorldWide Conferencing, LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,17 +14,25 @@
  * limitations under the License.
  */
 
-package net.liftweb.util;
+package net.liftweb
+package util
 
-/**
- * Array helpers
- */
-public final class A {
-    /**
-     * Create an array to pass to another method
-     */
-    @SuppressWarnings({"unchecked", "varargs"})
-    public static<T> T[] a(T... t) {
-      return t;
-    }
+import Helpers._
+import common._
+
+trait ConnectionIdentifier {
+  def jndiName: String
+
+  override def toString() = "ConnectionIdentifier(" + jndiName + ")"
+
+  override def hashCode() = jndiName.hashCode()
+
+  override def equals(other: Any): Boolean = other match {
+    case ci: ConnectionIdentifier => ci.jndiName == this.jndiName
+    case _ => false
+  }
+}
+
+case object DefaultConnectionIdentifier extends ConnectionIdentifier {
+  val jndiName = "lift"
 }
