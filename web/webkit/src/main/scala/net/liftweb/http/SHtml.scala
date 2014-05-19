@@ -43,6 +43,191 @@ object SHtml extends SHtml
  * to simplify the creation of markup, particularly with forms and AJAX.
  */
 trait SHtml {
+  /**
+   * Returns a function that will bind the passed handler function to a
+   * form element.
+   *
+   * If the passed element is a `form` element, its `action` will be bound to
+   * submit to a `/form/_id_` endpoint under the `LiftRules.liftPath` path
+   * (by default, the result will be `/lift/form/_id_`). This path will invoke
+   * the passed callback.
+   *
+   * If the passed element is a form input (`input`, `button`, `textarea`, or
+   * `select`), the handler function is bound to the element's name so that
+   * submitting it will call the function to be invoked. Note that since the
+   * handler function takes no parameters, no information about the element's
+   * contents will be passed in.
+   *
+   * Example:
+   * {{{
+   *   def logUserIn() = {
+   *     currentUser(User.findByUsernameAndPassword(username, password))
+   *   }
+   *
+   *   "form" #> SHtml.handler(logUserIn _)
+   * }}}
+   */
+  def handler(bareHandlerFunc: ()=>Unit): (NodeSeq)=>NodeSeq = {
+    { contents: NodeSeq =>
+      contents match {
+        case form @ Elem("form", _, _, _, _) =>
+          val funcId = mapHandlerFunc(stringHandlerFunc).guid
+
+          form % ("action" -> s"${LiftRules.liftPath}/form/$funcId")
+
+        case nameable @ Elem("input" | "button" | "textarea" | "select", _, _, _, _) =>
+          nameable % ("name" -> mapHandlerFunc(stringHandlerFn).guid)
+
+        case other =>
+          // don't process other elements at all
+          logger.info("Attempted to bind handler to non-form element.")
+          other
+      }
+    }
+  }
+
+  /**
+   * Returns a function that will bind the passed handler function to a
+   * form element.
+   *
+   * If the passed element is a form input (`input`, `button`, `textarea`, or
+   * `select`), the handler function is bound to the element's name so that
+   * submitting it will call the function to be invoked. The value of the form
+   * input will be passed to the function.
+   *
+   * If the passed element is a `form` element, its `action` will be bound to
+   * submit to a `/form/_id_` endpoint under the `LiftRules.liftPath` path
+   * (by default, the result will be `/lift/form/_id_`). This path will invoke
+   * the passed callback. Note that since forms have no associated value, the
+   * callback will always be passed an empty String. Consider passing a
+   * `()=>Unit` for `form`s instead.
+   *
+   * Example:
+   * {{{
+   *   var name: Box[String] = Empty
+   *
+   *   "@name" #> SHtml.handler({ typedName => name = Full(typedName) })
+   * }}}
+   */
+  def handler(stringHandlerFunc: (String)=>Unit): (NodeSeq)=>NodeSeq = {
+    { contents: NodeSeq =>
+      contents match {
+        case nameable @ Elem("input" | "button" | "textarea" | "select", _, _, _, _) =>
+          nameable % ("name" -> mapHandlerFunc(stringHandlerFn).guid)
+
+        case form @ Elem("form", _, _, _, _) =>
+          // FIXME Emit compiler warning instead?
+          logger.info("Bound String function to form; String will always be blank. Consider using a no-arg function.")
+
+          val funcId = mapHandlerFunc(stringHandlerFunc).guid
+
+          form % ("action" -> s"${LiftRules.liftPath}/form/$funcId")
+
+        case other =>
+          // don't process other elements at all
+          logger.info("Attempted to bind handler to non-form element.")
+          other
+      }
+    }
+  }
+
+  /**
+   * Returns a function that will bind the passed handler function id to an
+   * element's attribute.
+   *
+   * Irrespective of the element, this internally adds the provided function to
+   * the function map and binds an associated value to the attribute selected in
+   * the bind:
+   *  - If the selected attribute is a JavaScript `on*` attribute (e.g.,
+   *    `onclick`, etc), then an AJAX callback for this function is bound to
+   *    that attribute.
+   *  - If it is a different attribute, the function id itself is bound to that
+   *    attribute.
+   *
+   * Example:
+   * {{{
+   *   // Make the click event trigger a tracking function.
+   *   Attr("@name", "onclick") #> SHtml.handler(() => { clicked("name-field") })
+   *   // Client code can use the function id to call back and indicate the user
+   *   // closed a modal.
+   *   Attr("#modal", "data-closed-modal-fn") #> SHtml.handler(closedModal _)
+   * }}}
+   */
+  def handler(stringHandlerFunc: ()=>Unit)(implicit dummy: DummyImplicit): (NodeSeq, String)=>NodeSeq = {
+    { (contents: NodeSeq, attribute: String) =>
+      contents match {
+        case element: Elem =>
+          val funcInfo = mapHandlerFunc(stringHandlerFunc)
+
+          if (attribute.startsWith("on")) // bind events as AJAX, always
+            element % (attribute -> funcInfo.jsExp.toJsCmd)
+          else
+            element % (attribute -> funcInfo.guid)
+
+        case other =>
+          // don't process if we strangely were handled a non-Elem
+          logger.info(s"Got a NodeSeq ($other) instead of an Elem when binding handler.")
+          other
+      }
+    }
+  }
+
+  /**
+   * Returns a function that will bind the passed handler function id to an
+   * element's attribute.
+   *
+   * This works exactly like the handler function with no parameter, but client
+   * code can pass a value to it (e.g., `onchange` could pass the value of the
+   * field that changed).
+   *
+   * Example:
+   * {{{
+   *   // Make the change event trigger validation.
+   *   Attr("@name", "onchange") #> SHtml.handler({ typedName => validateName(typedName) })
+   *   // Client code can use the function id to call back and pass a user id to
+   *   // renderProfileForUser
+   *   Attr("#profile", "data-show-profile-fn") #> SHtml.handler(renderProfileForUser _)
+   * }}}
+   */
+  def handler(stringHandlerFunc: (String)=>Unit)(implicit dummy: DummyImplicit): (NodeSeq, String)=>NodeSeq = {
+    { (contents: NodeSeq, attribute: String) =>
+      contents match {
+        case element: Elem =>
+          val funcInfo = mapHandlerFunc(stringHandlerFunc)
+
+          if (attribute.startsWith("on")) // bind events as AJAX, always
+            element % (attribute -> funcInfo.jsExp.toJsCmd)
+          else
+            element % (attribute -> funcInfo.guid)
+
+        case other =>
+          // don't process if we strangely were handled a non-Elem
+          logger.info(s"Got a NodeSeq ($other) instead of an Elem when binding handler.")
+          other
+      }
+    }
+  }
+
+  def ajaxHandler(bareHandlerFunc: ()=>JsCmd): (NodeSeq)=>NodeSeq = {
+    { (contents: NodeSeq) =>
+      contents match {
+        case form @ Elem("form", _, _, _, _, _) =>
+          val funcInfo = mapHandlerFunc(bareHandlerFunc)
+
+          element %
+            ("action" -> "javascript://") %
+            ("onsubmit" -> submitAjaxForm(bareHandlerFunc))
+
+        case nameable @ Elem("input" | "button" | "textarea" | "select", _, _, _, _) =>
+          nameable % ("name" -> mapHandlerFunc(stringHandlerFn).guid)
+      }
+    }
+  }
+
+  def mapHandlerFunc(stringHandlerFunc: (String)=>JsCmd): GUIDJsExp = {
+    // fmapFunc
+    GUIDJsExp("boom", "boom")
+  }
 
   /**
    * Convert a T to a String for display in Select, MultiSelect,
