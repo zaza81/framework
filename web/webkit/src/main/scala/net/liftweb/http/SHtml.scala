@@ -153,11 +153,11 @@ trait SHtml {
    *   Attr("#modal", "data-closed-modal-fn") #> SHtml.handler(closedModal _)
    * }}}
    */
-  def handler(stringHandlerFunc: ()=>Unit)(implicit dummy: DummyImplicit): (NodeSeq, String)=>NodeSeq = {
+  def handler(bareHandlerFunc: ()=>Unit)(implicit dummy: DummyImplicit): (NodeSeq, String)=>NodeSeq = {
     { (contents: NodeSeq, attribute: String) =>
       contents match {
         case element: Elem =>
-          val funcInfo = mapHandlerFunc(stringHandlerFunc)
+          val funcInfo = mapHandlerFunc(bareHandlerFunc)
 
           if (attribute.startsWith("on")) // bind events as AJAX, always
             element % (attribute -> funcInfo.jsExp.toJsCmd)
