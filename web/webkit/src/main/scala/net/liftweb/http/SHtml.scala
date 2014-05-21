@@ -219,15 +219,134 @@ trait SHtml {
             ("action" -> "javascript://") %
             ("onsubmit" -> submitAjaxForm(funcInfo.guid))
 
-        case nameable @ Elem("input" | "button" | "textarea" | "select", _, _, _, _) =>
-          nameable % ("name" -> mapHandlerFunc(stringHandlerFn).guid)
+        case other => // if this isn't a form, assume we're setting an on* attribute
+          mapHandlerFunc(bareHandlerFunc).jsExp
       }
     }
   }
 
-  def mapHandlerFunc(stringHandlerFunc: (String)=>JsCmd): GUIDJsExp = {
-    // fmapFunc
-    GUIDJsExp("boom", "boom")
+  def ajaxHandler(stringHandlerFunc: (String)=>JsCmd, valueExpression: Option[JsExp] = None): (NodeSeq)=>NodeSeq = {
+    { (contents: NodeSeq) =>
+      contents match {
+        // For form fields, set onchange and submit field value as the value.
+        case Elem("input" | "button" | "textarea" | "select", _, _, _, _) =>
+          val funcInfo = mapHandlerFunc(stringHandlerFunc, valueExpression getOrElse JsRaw("this.value"))
+
+          nameable % ("onchange" -> funcInfo)
+
+        case form @ Elem("form", _, _, _, _) =>
+          // FIXME Emit compiler warning instead?
+          val expression = valueExpression getOrElse {
+            logger.info("Bound String AJAX function to form with no value; String will always be blank. Consider using a no-arg function.")
+            JsRaw("''")
+          }
+
+          val funcInfo = formGroup(1) { mapHandlerFunc(stringHandlerFunc, expression) }
+
+          form %
+            ("id" -> funcInfo.guid) %
+            ("action" -> "javascript://") %
+            ("onsubmit" -> submitAjaxForm(funcInfo.guid))
+
+        case other =>
+          // don't process if we strangely were handled a non-Elem
+          logger.info(s"Got unexpected NodeSeq ($other) instead of a form or form field when binding handler.")
+          other
+      }
+    }
+  }
+
+  def ajaxHandler(jsonHandlerFunc: (JValue)=>JsCmd, valueExpression: Option[JsExp] = None)(implicit dummy: DummyImplicit): (NodeSeq)=>NodeSeq = {
+    { (contents: NodeSeq) =>
+      contents match {
+        // For form fields, set onchange and submit field value as the value.
+        case Elem("input" | "button" | "textarea" | "select", _, _, _, _) =>
+          val funcInfo = mapHandlerFunc(jsonHandlerFunc, JsRaw("this.value"))
+
+          nameable % ("onchange" -> funcInfo)
+
+        case form @ Elem("form", _, _, _, _) =>
+          // FIXME Emit compiler warning instead?
+          val expression = valueExpression getOrElse {
+            JsRaw("''")
+          }
+
+          val funcInfo = formGroup(1) {
+            valueExpression.map(mapHandlerFunc(jsonHandlerFunc, _)) getOrElse {
+              logger.info("Bound JValue AJAX function to form with no value; JValue will always be JNothing. Consider using a no-arg function.")
+              mapHandlerFunc({ _: String => jsonHandlerFunc(JNothing) }) }
+            }
+
+          form %
+            ("id" -> funcInfo.guid) %
+            ("action" -> "javascript://") %
+            ("onsubmit" -> submitAjaxForm(funcInfo.guid))
+
+        case other =>
+          // don't process if we strangely were handled a non-Elem
+          logger.info(s"Got unexpected NodeSeq ($other) instead of a form or form field when binding handler.")
+          other
+      }
+    }
+  }
+
+  def ajaxHandler(bareHandlerFunc: ()=>JsCmd)(implicit dummy: DummyImplicit): (NodeSeq, String)=>NodeSeq = {
+    { (contents: NodeSeq, attribute: String) =>
+      if (attribute.startsWith("on"))
+        mapHandlerFunc(bareHandlerFunc).jsExp.toJsCmd
+      else
+        mapHandlerFunc(bareHandlerFunc).guid
+    }
+  }
+
+  def ajaxHandler(stringHandlerFunc: (String)=>JsCmd, valueExpression: Option[JsExp] = None)(implicit dummy: DummyImplicit, dummy: DummyImplicit): (NodeSeq, String)=>NodeSeq = {
+    { (contents: NodeSeq, attribute: String) =>
+      val funcInfo =
+        contents match {
+          // For form fields, set default value to this.value.
+          case Elem("input" | "button" | "textarea" | "select", _, _, _, _) =>
+           mapHandlerFunc(stringHandlerFunc, valueExpression getOrElse JsRaw("this.value"))
+
+          case other =>
+            if (valueExpression.isEmpty) {
+              logger.info(s"Got NodeSeq ($other) for String AJAX binding with no value expression; will always pass empty String.")
+            }
+
+           mapHandlerFunc(stringHandlerFunc, valueExpression)
+        }
+
+      if (attribute.startsWith("on"))
+        funcInfo.jsExp.toJsCmd
+      else
+        funcInfo.guid
+    }
+  }
+
+  def ajaxHandler(jsonHandlerFunc: (JValue)=>JsCmd, valueExpression: Option[JsExp] = None)(implicit dummy: DummyImplicit, dummy: DummyImplicit, dummy: DummyImplicit): (NodeSeq, String)=>NodeSeq = {
+    { (contents: NodeSeq, attribute: String) =>
+      val funcInfo =
+        contents match {
+          // For form fields, set default value to this.value.
+          case Elem("input" | "button" | "textarea" | "select", _, _, _, _) =>
+           mapHandlerFunc(stringHandlerFunc, valueExpression getOrElse JsRaw("this.value"))
+
+          case other =>
+            if (valueExpression.isEmpty) {
+              logger.info(s"Got NodeSeq ($other) for JValue AJAX binding with no value expression; will always pass JNothing.")
+            }
+
+            valueExpression.map(mapHandlerFunc(jsonHandlerFunc, _)) getOrElse {
+              mapHandlerFunc({ _: String => jsonHandlerFunc(JNothing) })
+            }
+        }
+
+      if (attribute.startsWith("on"))
+        funcInfo.jsExp.toJsCmd
+      else
+        funcInfo.guid
+    }
+  }
+
   /**
    * Maps the passed `bareHandlerFunc` into the session's list of callable
    * functions and returns a `GUIDJsExp` that can be used to get either the
