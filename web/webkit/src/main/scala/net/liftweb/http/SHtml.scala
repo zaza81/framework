@@ -196,9 +196,9 @@ trait SHtml {
           val funcInfo = mapHandlerFunc(stringHandlerFunc)
 
           if (attribute.startsWith("on")) // bind events as AJAX, always
-            element % (attribute -> funcInfo.jsExp.toJsCmd)
+            funcInfo.jsExp.toJsCmd
           else
-            element % (attribute -> funcInfo.guid)
+            funcInfo.guid
 
         case other =>
           // don't process if we strangely were handled a non-Elem
