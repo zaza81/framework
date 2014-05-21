@@ -214,9 +214,10 @@ trait SHtml {
         case form @ Elem("form", _, _, _, _, _) =>
           val funcInfo = formGroup(1) { mapHandlerFunc(bareHandlerFunc) }
 
-          element %
+          form %
+            ("id" -> funcInfo.guid) %
             ("action" -> "javascript://") %
-            ("onsubmit" -> submitAjaxForm(bareHandlerFunc))
+            ("onsubmit" -> submitAjaxForm(funcInfo.guid))
 
         case nameable @ Elem("input" | "button" | "textarea" | "select", _, _, _, _) =>
           nameable % ("name" -> mapHandlerFunc(stringHandlerFn).guid)
