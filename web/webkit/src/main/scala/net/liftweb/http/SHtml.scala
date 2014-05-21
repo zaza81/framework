@@ -71,7 +71,7 @@ trait SHtml {
     { contents: NodeSeq =>
       contents match {
         case form @ Elem("form", _, _, _, _) =>
-          val funcId = mapHandlerFunc(stringHandlerFunc).guid
+          val funcId = formGroup(1) { mapHandlerFunc(stringHandlerFunc).guid }
 
           form % ("action" -> s"${LiftRules.liftPath}/form/$funcId")
 
@@ -119,7 +119,7 @@ trait SHtml {
           // FIXME Emit compiler warning instead?
           logger.info("Bound String function to form; String will always be blank. Consider using a no-arg function.")
 
-          val funcId = mapHandlerFunc(stringHandlerFunc).guid
+          val funcId = formGroup(1) { mapHandlerFunc(stringHandlerFunc).guid }
 
           form % ("action" -> s"${LiftRules.liftPath}/form/$funcId")
 
@@ -212,7 +212,7 @@ trait SHtml {
     { (contents: NodeSeq) =>
       contents match {
         case form @ Elem("form", _, _, _, _, _) =>
-          val funcInfo = mapHandlerFunc(bareHandlerFunc)
+          val funcInfo = formGroup(1) { mapHandlerFunc(bareHandlerFunc) }
 
           element %
             ("action" -> "javascript://") %
