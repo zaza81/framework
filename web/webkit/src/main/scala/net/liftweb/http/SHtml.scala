@@ -228,7 +228,58 @@ trait SHtml {
   def mapHandlerFunc(stringHandlerFunc: (String)=>JsCmd): GUIDJsExp = {
     // fmapFunc
     GUIDJsExp("boom", "boom")
+  /**
+   * Maps the passed `bareHandlerFunc` into the session's list of callable
+   * functions and returns a `GUIDJsExp` that can be used to get either the
+   * JS to call the function or the GUID of the function for separately
+   * invoking it.
+   */
+  def mapHandlerFunc(bareHandlerFunc: ()=>JsCmd): GUIDJSExp = {
+    fmapFunc(bareHandlerFunc) { funcName =>
+      GUIDJsExp(funcName, makeAjaxCall(JsRaw(s"'$funcName=_'")))
+    }
   }
+
+  /**
+   * Maps the passed `stringHandlerFunc` into the session's list of callable
+   * functions and returns a `GUIDJsExp` that can be used to get either the
+   * JS to call the function or the GUID of the function for separately
+   * invoking it.
+   *
+   * The string parameter is the result of calling `valueExpression` on the
+   * client.
+   */
+  def mapHandlerFunc(stringHandlerFunc: (String)=>JsCmd, valueExpression: JsExp = JsRaw("")): GUIDJsExp = {
+    fmapFunc(stringHandlerFunc) { funcName =>
+      GUIDJsExp(funcName, makeAjaxCall(JsRaw(s"'$funcName=' + encodeURIComponent(${valueExpression.toJsCmd})")))
+    }
+  }
+
+  /**
+   * Maps the passed `jsonHandlerFunc` into the session's list of callable
+   * functions and returns a `GUIDJsExp` that can be used to get either the
+   * JS to call the function or the GUID of the function for separately
+   * invoking it.
+   *
+   * The JSON parameter is the result of calling `valueExpression` and
+   * JSON-stringifying the results on the client and then stringifying it. If
+   * the JSON that arrives at the server is not parseable, the callback is not
+   * invoked.
+   */
+  def mapHandlerFunc(jsonHandlerFunc: (JValue)=>JsCmd, valueExpression: JsExp = JsRaw(""))(implicit dummy: DummyImplicit): GUIDJsExp = {
+    mapHandlerFunc({ jsonString: String =>
+      parseOpt(jsonString).map(jsonHandlerFunc)
+    }, JsRaw(s"JSON.stringify(${valueExpression.toJsCmd})"))
+  }
+
+  // TODO Possibly an overload for (Box[JValue])=>JsCmd?
+
+  /**
+   * Runs an ajax request with the data produced by running `in` on the client.
+   *
+   * @param in The JsExp that returns the request data.
+   */
+  def makeAjaxCall(in: JsExp): JsExp = JsRaw(s"lift.ajax(${in.toJsCmd}, null, null, null)")
 
   /**
    * Convert a T to a String for display in Select, MultiSelect,
@@ -310,14 +361,6 @@ trait SHtml {
      * Apply the attribute to the element
      */
     def apply(in: Elem): Elem = in % (name -> value)
-  }
-
-  /**
-   * Invokes the Ajax request
-   * @param in the JsExp that returns the request data
-   */
-  def makeAjaxCall(in: JsExp): JsExp = new JsExp {
-    def toJsCmd = "lift.ajax(" + in.toJsCmd + ", null, null, null)"
   }
 
   /**
@@ -2548,7 +2591,7 @@ final case class SeqNodeSeqFunc(f: Seq[NodeSeq => NodeSeq]) extends NodeSeqFuncO
  * the toString method returns the expresion itself).  It should make the ajaxCall()._2.toJsCmd
  * thing into ajaxCall().
  */
-class GUIDJsExp(val guid: String,val exp: JsExp) extends JsExp {
+class GUIDJsExp(val guid: String, val exp: JsExp) extends JsExp {
   def product: (String, JsExp) = this
 
   def _1: String = guid
