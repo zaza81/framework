@@ -178,7 +178,12 @@ trait SHtml {
    *
    * This works exactly like the handler function with no parameter, but client
    * code can pass a value to it (e.g., `onchange` could pass the value of the
-   * field that changed).
+   * field that changed). By default, if the handler is being bound to a form
+   * field and no `valueExpression` is specified, the field's value is passed
+   * to the handler. For other elements, `this` is passed unless otherwise
+   * specified. Note that this only matters for `on*` handlers, as otherwise the
+   * function id is what's bound on the client, and the client can invoke that
+   * function id with whatever value they wish.
    *
    * Example:
    * {{{
@@ -189,25 +194,94 @@ trait SHtml {
    *   Attr("#profile", "data-show-profile-fn") #> SHtml.handler(renderProfileForUser _)
    * }}}
    */
-  def handler(stringHandlerFunc: (String)=>Unit)(implicit dummy: DummyImplicit): (NodeSeq, String)=>NodeSeq = {
+  def handler(stringHandlerFunc: (String)=>Unit, valueExpression: Option[JsExp] = None)(implicit dummy: DummyImplicit): (NodeSeq, String)=>NodeSeq = {
     { (contents: NodeSeq, attribute: String) =>
-      contents match {
-        case element: Elem =>
-          val funcInfo = mapHandlerFunc(stringHandlerFunc)
+      val funcInfo =
+        contents match {
+          // For form fields, set default value to this.value.
+          case Elem("input" | "button" | "textarea" | "select", _, _, _, _) =>
+            mapHandlerFunc(stringHandlerFunc, valueExpression getOrElse JsRaw("this.value"))
 
-          if (attribute.startsWith("on")) // bind events as AJAX, always
-            funcInfo.jsExp.toJsCmd
-          else
-            funcInfo.guid
+          case other =>
+            mapHandlerFunc(stringHandlerFunc, valueExpression getOrElse JsRaw("this"))
+        }
 
-        case other =>
-          // don't process if we strangely were handled a non-Elem
-          logger.info(s"Got a NodeSeq ($other) instead of an Elem when binding handler.")
-          other
-      }
+      if (attribute.startsWith("on"))
+        funcInfo.jsExp.toJsCmd
+      else
+        funcInfo.guid
     }
   }
 
+  /**
+   * Returns a function that will bind the passed handler function id to an
+   * element's attribute.
+   *
+   * This works exactly like `handler((String)=>JsCmd)`, but the
+   * `valueExpression`, if used, is JSON-stringified before being sent to the
+   * server, and parsed by `lift-json` for passing to the handler function.
+   *
+   * Example:
+   * {{{
+   *   // Make the change event trigger validation.
+   *   Attr("@user-details", "onchange") #> SHtml.handler({ userDetailsJson =>
+   *     val JString(email) = userDetailsJson \ "email"
+   *     validateEmail(email)
+   *   })
+   *   // Client code can use the function id to call back and pass a user id to
+   *   // renderProfileForUser
+   *   Attr("#profile", "data-show-profile-fn") #> SHtml.handler(renderProfileForUser _)
+   * }}}
+   */
+  def handler(jsonHandlerFunc: (JValue)=>JsCmd, valueExpression: Option[JsExp] = None)(implicit dummy: DummyImplicit, dummy: DummyImplicit, dummy: DummyImplicit): (NodeSeq, String)=>NodeSeq = {
+    { (contents: NodeSeq, attribute: String) =>
+      val funcInfo =
+        contents match {
+          // For form fields, set default value to this.value.
+          case Elem("input" | "button" | "textarea" | "select", _, _, _, _) =>
+           mapHandlerFunc(jsonHandlerFunc, valueExpression getOrElse JsRaw("this.value"))
+
+          case other =>
+            mapHandlerFunc(jsonHandlerFunc, valueExpression getOrElse JsRaw("this"))
+        }
+
+      if (attribute.startsWith("on"))
+        funcInfo.jsExp.toJsCmd
+      else
+        funcInfo.guid
+    }
+  }
+
+
+  /**
+   * Returns a function that will bind the passed handler function to a
+   * form element or the event handler attribute of another element.
+   *
+   * If the passed element is a `form` element, its `onsubmit` will be bound to
+   * serialize the form's elements and submit them via AJAX. The passed
+   * function will be invoked after the form elements are handled, and the
+   * `JsCmd` result returned from it will be sent down to the client.
+   *
+   * If the passed element is anything else the handler function is stored in
+   * the session's function map and the JavaScript that would invoke that
+   * function via AJAX is returned. This is for use with `on*` attributes.
+   * Note that since the handler function takes no parameters, no information
+   * about the element's contents will be passed in.
+   *
+   * Examples:
+   * {{{
+   *   def logUserIn() = {
+   *     currentUser(User.findByUsernameAndPassword(username, password))
+   *     Alert("Logged in!")
+   *   }
+   *   def usernameFocused() = {
+   *     Alert("Focused username!")
+   *   }
+   *
+   *   "form" #> SHtml.ajaxHandler(logUserIn _) &
+   *   "@username [onfocus]" #> SHtml.ajaxHandler(usernameFocused _)
+   * }}}
+   */
   def ajaxHandler(bareHandlerFunc: ()=>JsCmd): (NodeSeq)=>NodeSeq = {
     { (contents: NodeSeq) =>
       contents match {
@@ -225,6 +299,42 @@ trait SHtml {
     }
   }
 
+  /**
+   * Returns a function that will bind the passed handler function to a
+   * `form` element or its fields.
+   *
+   * If the passed element is a `form` element, its `onsubmit` will be bound to
+   * serialize the form's elements and submit them via AJAX. The passed
+   * function will be invoked after the form elements are handled, and the
+   * `JsCmd` result returned from it will be sent down to the client. If a
+   * `valueExpression` is provided, the results of evaluating it on the client
+   * are passed, as a `String`, to the handler function.
+   *
+   * If the passed element is a form field (`input`, `button`, `textarea`, or
+   * `select`), the field's `onchange` handler is set up to call the handler
+   * function. The handler function will receive the result of evaluating
+   * `valueExpression` on the client if it is specified, or the value of the
+   * field otherwise.
+   *
+   * Examples:
+   * {{{
+   *   def logUserIn(currentUri: String) = {
+   *     currentUser(User.findByUsernameAndPassword(username, password))
+   *
+   *     if (currentUri == '/login')
+   *       RedirectTo("/home")
+   *     else
+   *       Noop
+   *   }
+   *   def usernameChanged(newUsername: String) = {
+   *     if (! validUsername_?(newUsername))
+   *       Alert("Username is invalid!")
+   *   }
+   *
+   *   "form" #> SHtml.ajaxHandler(logUserIn _, Some(JsRaw("window.location.toString()"))) &
+   *   "@username" #> SHtml.ajaxHandler(usernameChanged _)
+   * }}}
+   */
   def ajaxHandler(stringHandlerFunc: (String)=>JsCmd, valueExpression: Option[JsExp] = None): (NodeSeq)=>NodeSeq = {
     { (contents: NodeSeq) =>
       contents match {
@@ -256,6 +366,35 @@ trait SHtml {
     }
   }
 
+  /**
+   * Does the same as the version that takes a `(String)=>JsCmd`, but instead
+   * takes a `(JValue)=>JsCmd`. The value that is provided on the client side
+   * (either via `valueExpression` or, if the element being bound is a form
+   * field, the field's value) is JSON-stringified and then sent to the server.
+   * `form` element or its fields.
+   *
+   * Examples:
+   * {{{
+   *   def logUserIn(locationInfo: JValue) = {
+   *     currentUser(User.findByUsernameAndPassword(username, password))
+   *
+   *     val JString(hash) = locationInfo \ "hash"
+   *     if (hash == "login")
+   *       RedirectTo("/home")
+   *     else
+   *       Noop
+   *   }
+   *   def userDetailsChanged(detailsJson: JValue) = {
+   *     val details = detailsJson.extract[UserDetails]
+   *
+   *     if (details.email.isEmpty)
+   *       Alert("Email is missing!")
+   *   }
+   *
+   *   "form" #> SHtml.ajaxHandler(logUserIn _, Some(JsRaw("window.location")))) &
+   *   "@user-details" #> SHtml.ajaxHandler(userDetailsChanged _)
+   * }}}
+   */
   def ajaxHandler(jsonHandlerFunc: (JValue)=>JsCmd, valueExpression: Option[JsExp] = None)(implicit dummy: DummyImplicit): (NodeSeq)=>NodeSeq = {
     { (contents: NodeSeq) =>
       contents match {
@@ -290,38 +429,65 @@ trait SHtml {
     }
   }
 
+  /**
+   * Binds the handler function and returns either the JS to invoke the handler
+   * from the client via AJAX (if we are attempting to bind it to an attribute
+   * that starts with `on`) or just the handler's function id.
+   *
+   * This is a synonym for `handler(()=>JsCmd)` when used with an `Attr` bind.
+   *
+   * Examples:
+   * {{{
+   *   // Make the change event trigger validation.
+   *   Attr("@name", "onchange") #> SHtml.ajaxHandler({ typedName => validateName(typedName) })
+   *   // Client code can use the function id to call back and pass a user id to
+   *   // renderProfileForUser
+   *   Attr("#profile", "data-show-profile-fn") #> SHtml.handler(renderProfileForUser _)
+   * }}}
+   */
   def ajaxHandler(bareHandlerFunc: ()=>JsCmd)(implicit dummy: DummyImplicit): (NodeSeq, String)=>NodeSeq = {
-    { (contents: NodeSeq, attribute: String) =>
-      if (attribute.startsWith("on"))
-        mapHandlerFunc(bareHandlerFunc).jsExp.toJsCmd
-      else
-        mapHandlerFunc(bareHandlerFunc).guid
-    }
+    handler(bareHandlerFunc)
   }
 
+  /**
+   * Binds the handler function and returns either the JS to invoke the handler
+   * from the client via AJAX (if we are attempting to bind it to an attribute
+   * that starts with `on`) or just the handler's function id.
+   *
+   * This is a synonym for `handler((String)=>JsCmd)` when used with an `Attr` bind.
+   *
+   * Examples:
+   * {{{
+   *   // Make the change event trigger validation.
+   *   Attr("@name", "onchange") #> SHtml.ajaxHandler({ typedName => validateName(typedName) })
+   *   // Client code can use the function id to call back and pass a user id to
+   *   // renderProfileForUser
+   *   Attr("#profile", "data-show-profile-fn") #> SHtml.handler(renderProfileForUser _)
+   * }}}
+   */
   def ajaxHandler(stringHandlerFunc: (String)=>JsCmd, valueExpression: Option[JsExp] = None)(implicit dummy: DummyImplicit, dummy: DummyImplicit): (NodeSeq, String)=>NodeSeq = {
-    { (contents: NodeSeq, attribute: String) =>
-      val funcInfo =
-        contents match {
-          // For form fields, set default value to this.value.
-          case Elem("input" | "button" | "textarea" | "select", _, _, _, _) =>
-           mapHandlerFunc(stringHandlerFunc, valueExpression getOrElse JsRaw("this.value"))
-
-          case other =>
-            if (valueExpression.isEmpty) {
-              logger.info(s"Got NodeSeq ($other) for String AJAX binding with no value expression; will always pass empty String.")
-            }
-
-           mapHandlerFunc(stringHandlerFunc, valueExpression)
-        }
-
-      if (attribute.startsWith("on"))
-        funcInfo.jsExp.toJsCmd
-      else
-        funcInfo.guid
-    }
+    handler(stringHandlerFunc, valueExpression)
   }
 
+  /**
+   * Binds the handler function and returns either the JS to invoke the handler
+   * from the client via AJAX (if we are attempting to bind it to an attribute
+   * that starts with `on`) or just the handler's function id.
+   *
+   * This is a synonym for `handler((JValue)=>JsCmd)` when used with an `Attr` bind.
+   *
+   * Examples:
+   * {{{
+   *   // Make the change event trigger validation.
+   *   Attr("@user-details", "onchange") #> SHtml.ajaxHandler({ userDetailsJson =>
+   *     val JString(email) = userDetailsJson \ "email"
+   *     validateEmail(email)
+   *   })
+   *   // Client code can use the function id to call back and pass a user id to
+   *   // renderProfileForUser
+   *   Attr("#profile", "data-show-profile-fn") #> SHtml.ajaxHandler(renderProfileForUser _)
+   * }}}
+   */
   def ajaxHandler(jsonHandlerFunc: (JValue)=>JsCmd, valueExpression: Option[JsExp] = None)(implicit dummy: DummyImplicit, dummy: DummyImplicit, dummy: DummyImplicit): (NodeSeq, String)=>NodeSeq = {
     { (contents: NodeSeq, attribute: String) =>
       val funcInfo =
