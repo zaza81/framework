@@ -12,9 +12,8 @@ startYear in ThisBuild             := Some(2006)
 
 organizationName in ThisBuild      := "WorldWide Conferencing, LLC"
 
-scalaVersion in ThisBuild          := "2.10.4"
+scalaVersion in ThisBuild          := "2.11.1"
 
-crossScalaVersions in ThisBuild    := Seq("2.10.0")
 
 libraryDependencies in ThisBuild <++= scalaVersion {sv => Seq(specs2(sv), scalacheck) }
 
@@ -30,3 +29,8 @@ pomExtra in ThisBuild              ~= (_ ++ {Developers.toXml})
 credentials in ThisBuild <+= state map { s => Credentials(BuildPaths.getGlobalSettingsDirectory(s, BuildPaths.getGlobalBase(s)) / ".credentials") }
 
 initialize <<= (name, version, scalaVersion) apply printLogo
+
+resolvers  in ThisBuild           ++= Seq(
+  "snapshots"     at "http://oss.sonatype.org/content/repositories/snapshots",
+  "releases"      at "http://oss.sonatype.org/content/repositories/releases"
+)

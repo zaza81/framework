@@ -24,7 +24,7 @@ import org.specs2.specification.Fragment
 import org.joda.time._
 
 import http.js.JE._
-import common.Empty
+import common._
 import http.{S, LiftSession}
 import json._
 import util._
@@ -54,15 +54,18 @@ object RecordSpec extends Specification  {
     }
 
     "correctly look up fields by name" in {
-      for (name <- allExpectedFieldNames) yield {
-        rec.fieldByName(name).isDefined must_== true
-      }
+      val fields = allExpectedFieldNames.flatMap(rec.fieldByName _)
+
+      fields.length must_== allExpectedFieldNames.length
     }
 
     "not look up fields by bogus names" in {
-      for (name <- allExpectedFieldNames) yield {
-        rec.fieldByName("x" + name + "y").isDefined must_== false
-      }
+      val fields =
+        allExpectedFieldNames.flatMap { name =>
+          rec.fieldByName("x" + name + "y")
+        }
+
+      fields.length must_== 0
     }
 
     "ignore synthetic methods" in {
@@ -330,11 +333,8 @@ object RecordSpec extends Specification  {
 
       "get set from json string using lift-json parser" in {
         S.initIfUninitted(new LiftSession("", randomString(20), Empty)) {
-          val fttrFromJson = FieldTypeTestRecord.fromJsonString(fttrJson)
-          fttrFromJson.isDefined must_== true
-          fttrFromJson.toList map { r =>
-            r mustEqual fttr
-          }
+          val fttrFromJSON = FieldTypeTestRecord.fromJsonString(fttrJson)
+          fttrFromJSON must_== Full(fttr)
         }
       }
     }
