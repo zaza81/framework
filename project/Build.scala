@@ -111,7 +111,7 @@ object BuildDef extends Build {
   // Web Projects
   // ------------
   lazy val web: Seq[ProjectReference] =
-    Seq(testkit, webkit)
+    Seq(testkit, webkit, webkitMacros)
 
   lazy val testkit =
     webProject("testkit")
@@ -132,7 +132,10 @@ object BuildDef extends Build {
                     System.setProperty("net.liftweb.webapptest.src.test.webapp", (src / "webapp").absString)
                   })
 
-
+  lazy val webkitMacros =
+    webProject("webkit-macros")
+        .dependsOn(webkit)
+        .settings(description := "2.11 macros for Webkit")
 
   // Persistence Projects
   // --------------------
