@@ -56,10 +56,10 @@ object CssSelectorMacrosSpecs extends Specification {
       c"#magic !!" must_== IdSelector("magic", Full(DontMergeAttributes))
     }
 
-    "parse attribute change selectors" in {
-      c"#magic [onclick]" must_== IdSelector("magic", Full(AttrSubNode("onclick")))
-      c"#magic [onclick+]" must_== IdSelector("magic", Full(AttrAppendSubNode("onclick")))
-      c"#magic [onclick!]" must_== IdSelector("magic", Full(AttrRemoveSubNode("onclick")))
+    "parse and mark attribute change selectors" in {
+      c"#magic [onclick]" must_== AttrModifyingSelector("onclick", IdSelector("magic", Full(AttrSubNode("onclick"))))
+      c"#magic [onclick+]" must_== AttrModifyingSelector("onclick", IdSelector("magic", Full(AttrAppendSubNode("onclick"))))
+      c"#magic [onclick!]" must_== AttrModifyingSelector("onclick", IdSelector("magic", Full(AttrRemoveSubNode("onclick"))))
     }
 
     "parse select-this-node selectors" in {

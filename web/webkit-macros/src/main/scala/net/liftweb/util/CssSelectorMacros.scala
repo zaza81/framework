@@ -18,6 +18,8 @@ object CssSelectorMacros {
   def parseSelector(context: Context)(in: context.Expr[Any]*) = {
     import context.universe._
 
+    case class TreeificationInfo(tree: context.Tree, modifiedAttribute: Option[String] = None)
+
     def treeifyFailure(failure: Failure): context.Tree = {
       val Failure(message, exceptionBox, chain) = failure
 
@@ -41,60 +43,74 @@ object CssSelectorMacros {
       q"Failure($message, $exceptionTree, $chainTree)"
     }
 
-    def treeifySubNode(subNode: SubNode): context.Tree = {
+    def treeifySubNode(subNode: SubNode): TreeificationInfo = {
       subNode match {
         case KidsSubNode() =>
-          q"KidsSubNode()"
+          TreeificationInfo(q"KidsSubNode()")
         case PrependKidsSubNode() =>
-          q"PrependKidsSubNode()"
+          TreeificationInfo(q"PrependKidsSubNode()")
         case AppendKidsSubNode() =>
-          q"AppendKidsSubNode()"
+          TreeificationInfo(q"AppendKidsSubNode()")
         case SurroundKids() =>
-          q"SurroundKids()"
+          TreeificationInfo(q"SurroundKids()")
 
         case DontMergeAttributes =>
-          q"DontMergeAttributes"
+          TreeificationInfo(q"DontMergeAttributes")
 
         case AttrSubNode(attr) =>
-          q"AttrSubNode($attr)"
+          TreeificationInfo(q"AttrSubNode($attr)", Some(attr))
         case AttrAppendSubNode(attr) =>
-          q"AttrAppendSubNode($attr)"
+          TreeificationInfo(q"AttrAppendSubNode($attr)", Some(attr))
         case AttrRemoveSubNode(attr) =>
-          q"AttrRemoveSubNode($attr)"
+          TreeificationInfo(q"AttrRemoveSubNode($attr)", Some(attr))
 
         case SelectThisNode(kids) =>
-          q"SelectThisNode($kids)"
+          TreeificationInfo(q"SelectThisNode($kids)")
       }
     }
 
-    def treeifySubNodes(subNodes: Box[SubNode]): context.Tree = {
+    def treeifySubNodes(subNodes: Box[SubNode]): TreeificationInfo = {
       subNodes match {
-        case Empty => q"Empty"
-        case failure: Failure => treeifyFailure(failure)
+        case Empty => TreeificationInfo(q"Empty")
+        case failure: Failure => TreeificationInfo(treeifyFailure(failure))
         case Full(subNode) =>
-          q"Full(${treeifySubNode(subNode)})"
+          val subNodeTreeInfo = treeifySubNode(subNode)
+
+          subNodeTreeInfo.copy(tree = q"Full(${subNodeTreeInfo.tree})")
       }
     }
 
-    def treeifySelector(selector: CssSelector): context.Tree = {
+    def treeifySelector(selector: CssSelector): TreeificationInfo = {
       import context.universe._
 
+      val subNodeTreeInfo = treeifySubNodes(selector.subNodes)
+      val subNodeTree = subNodeTreeInfo.tree
+
       selector match {
-        case EnclosedSelector(parent, kid) =>
-          q"EnclosedSelector(${treeifySelector(parent)}, ${treeifySelector(kid)})"
+        case EnclosedSelector(parent, child) =>
+          val parentTreeInfo = treeifySelector(parent)
+          val childTreeInfo = treeifySelector(child)
+
+          TreeificationInfo(
+            q"EnclosedSelector(${parentTreeInfo.tree}, ${childTreeInfo.tree})",
+            parentTreeInfo.modifiedAttribute orElse childTreeInfo.modifiedAttribute
+          )
+
+        case AttrModifyingSelector(attribute, selector) =>
+          subNodeTreeInfo.copy(tree = q"AttrModifyingSelector($attribute, $subNodeTree)")
 
         case ElemSelector(elem, subNodes) =>
-          q"ElemSelector($elem, ${treeifySubNodes(subNodes)})"
+          subNodeTreeInfo.copy(tree = q"ElemSelector($elem, $subNodeTree)")
         case IdSelector(id, subNodes) =>
-          q"IdSelector($id, ${treeifySubNodes(subNodes)})"
+          subNodeTreeInfo.copy(tree = q"IdSelector($id, $subNodeTree)")
         case ClassSelector(className, subNodes) =>
-          q"ClassSelector($className, Empty)"
+          subNodeTreeInfo.copy(tree = q"ClassSelector($className, $subNodeTree)")
         case NameSelector(name, subNodes) =>
-          q"NameSelector($name, Empty)"
+          subNodeTreeInfo.copy(tree = q"NameSelector($name, $subNodeTree)")
         case AttrSelector(name, value, subNodes) =>
-          q"AttrSelector($name, $value, Empty)"
+          subNodeTreeInfo.copy(tree = q"AttrSelector($name, $value, $subNodeTree)")
         case StarSelector(subNodes, singleDepth) =>
-          q"StarSelector(${treeifySubNodes(subNodes)}, $singleDepth)"
+          subNodeTreeInfo.copy(tree = q"StarSelector($subNodeTree, $singleDepth)")
       }
     }
 
@@ -111,7 +127,13 @@ object CssSelectorMacros {
                 abortWithMessage(context, "Invalid CSS selector.")
 
               case Full(selector) =>
-                treeifySelector(selector)
+                val selectorTreeInfo = treeifySelector(selector)
+
+                selectorTreeInfo.modifiedAttribute.map { attribute =>
+                  q"AttrModifyingSelector($attribute, ${selectorTreeInfo.tree})"
+                } getOrElse {
+                  selectorTreeInfo.tree
+                }
             }
           case _ =>
             abortWithMessage(context, "The c macro only supports simple Strings for now.")
