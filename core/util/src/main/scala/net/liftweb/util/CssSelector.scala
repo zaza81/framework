@@ -61,6 +61,16 @@ subNodes: Box[SubNode]) extends CssSelector {
   def withSubnode(sn: SubNode): CssSelector = this.copy(subNodes = Full(sn))
 }
 
+/**
+ * Used to mark a selector hierarchy that ultimately modifies an attribute (by
+ * terminating in an `Attr*SubNode`). Expected to be at the root of a selector
+ * hierarchy.
+ */
+final case class AttrModifyingSelector(attribute: String, selector: CssSelector) extends CssSelector {
+  def subNodes: Box[SubNode] = Empty
+  def withSubnode(subNode: SubNode): CssSelector = this
+}
+
 sealed trait SubNode
 
 object SubNode {
