@@ -24,9 +24,9 @@ transforms it according to a set of rules, producing a final `NodeSeq` with all
 of the transformations applied. This means a CSS Selector Transform is
 ultimately simply a function with signature `(NodeSeq)=>NodeSeq`. CSS Selector
 Transforms consist of three main components:
- - The selector
- - The subnode modification rule
- - The transformation function
+ * The selector
+ * The subnode modification rule
+ * The transformation function
 
 ///
   Nice to have: graphic that shows a selector transform pointing to each
@@ -154,12 +154,12 @@ Benedict Cumberbatch
 ====
 
 These examples show a few options:
- - You can select by element name or by class name. More available selectors are
+ * You can select by element name or by class name. More available selectors are
    in the section below on <<available-selectors>>.
- - You can set the body of an element, an attribute of an element, or even
+ * You can set the body of an element, an attribute of an element, or even
    replace the element altogether. More subnode modification rules are in the
    section below on <<available-modification-rules>>.
- - You can combine multiple CSS selector transforms using the `&` operator. This
+ * You can combine multiple CSS selector transforms using the `&` operator. This
    is subject to some limitations detailed in the section below on <<combining-selectors-and-transforms>>.
 
 == Available Selectors
