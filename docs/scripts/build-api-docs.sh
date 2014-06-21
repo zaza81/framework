@@ -11,4 +11,10 @@ fi
 
 sbt -Dsbt.log.noformat=true doc
 
-cp target/api $WORK_DIR/api
+for VERSION_DIR in target/scala-*/api
+do
+  SCALA_DIR=`echo $VERSION_DIR | sed -e "s/^.*\(scala-[^/]*\).*$/\1/"`
+
+  mkdir -p $WORK_DIR/$SCALA_DIR/api
+  cp -r $VERSION_DIR/* $WORK_DIR/$SCALA_DIR/api
+done
