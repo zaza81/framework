@@ -1,7 +1,9 @@
  - api-docs:
    - docs/scripts/build-api-docs.sh|bash:
-     - sh:
-        timeout: 5000
+     - bash: {
+       add-new-files: True,
+       additional-doc-settings: { Output: True }
+     }
 
  - html-docs:
    - docs/*.adoc|asciidoctor
