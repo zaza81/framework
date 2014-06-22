@@ -11,10 +11,16 @@ fi
 
 sbt -Dsbt.log.noformat=true doc
 
+DOCS_DIR=$WORK_DIR
+until [ "$(basename $DOCS_DIR)" == "docs" ]
+do
+  DOCS_DIR=$(dirname $DOCS_DIR)
+done
+
 for VERSION_DIR in target/scala-*/api
 do
   SCALA_DIR=`echo $VERSION_DIR | sed -e "s/^.*\(scala-[^/]*\).*$/\1/"`
 
-  mkdir -p $WORK_DIR/$SCALA_DIR/api
-  cp -r $VERSION_DIR/* $WORK_DIR/$SCALA_DIR/api
+  mkdir -p $DOCS_DIR/api/$SCALA_DIR
+  cp -r $VERSION_DIR/* $DOCS_DIR/api/$SCALA_DIR
 done
