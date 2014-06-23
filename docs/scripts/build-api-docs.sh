@@ -23,4 +23,7 @@ do
 
   mkdir -p $DOCS_DIR/api/$SCALA_DIR
   cp -r $VERSION_DIR/* $DOCS_DIR/api/$SCALA_DIR
+
+  sbt -Dsbt.log.noformat=true "project lift-documentation-helpers" \
+    "run-main net.liftweb.documentation.AddSearchToApiDocs \"$DOCS_DIR/api/$SCALA_DIR\""
 done
