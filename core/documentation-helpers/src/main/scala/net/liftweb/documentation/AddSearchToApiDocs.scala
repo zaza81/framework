@@ -10,8 +10,17 @@ import common._
 import util.Html5
 import util.Helpers._
 
+sealed trait ItemType
+object ItemType {
+  case object Singleton extends ItemType
+  case object Class extends ItemType
+  case object Trait extends ItemType
+}
 
 case class FileInfo(file: File, contents: String, nestLevel: Int)
+
+case class MemberApiInfo(modifier: String, name: String, paramString: String, result: String)
+case class ApiInfo(itemType: ItemType, name: String, signature: String, members: List[MemberApiInfo])
 
 object AddSearchToApiDocs extends App {
   object FileWithContents {
@@ -44,6 +53,86 @@ object AddSearchToApiDocs extends App {
     }
   }
 
+  private def forElement(label: String, handlerFn: (Elem)=>Unit): (NodeSeq)=>NodeSeq = {
+    { ns: NodeSeq =>
+      ns match {
+        case matched: Elem if matched.label == label =>
+          handlerFn(matched)
+
+          matched
+
+        case other =>
+          other
+      }
+    }
+  }
+
+  private def hasClass_?(element: Elem, className: String) = {
+    element.attribute("class") match {
+      case Some(thing) =>
+        charSplit(thing.text, ' ').exists(_ == className)
+      case _ =>
+        false
+    }
+  }
+
+  /**
+   * Returns a transformation function that leaves its contents untouched, but
+   * extracts an ApiInfo from them. This ApiInfo is passed to the
+   * `assignmentFn` immediately before returning the unchanged contents.
+   */
+  def extractApiInfo(assignmentFn: (ApiInfo)=>Unit): (NodeSeq)=>NodeSeq = {
+    var info = ApiInfo(ItemType.Class, "", "", Nil)
+    var extracted = false
+
+    val extractType =
+      "body [class]" #> forElement("body", { body =>
+          if (hasClass_?(body, "value")) {
+            info.copy(itemType = ItemType.Singleton)
+          }
+
+          extracted = hasClass_?(body, "value") || hasClass_?(body, "type")
+      })
+
+    val extractName =
+      "#definition h1" #> forElement("h1", { h1 =>
+        info = info.copy(name = h1.text.trim.replaceAll("\\s+", " "))
+      })
+
+    val extractSignature =
+      "#signature" #> forElement("h4", { h4 =>
+        val itemType =
+          if (h4.text.contains("trait")) {
+            ItemType.Trait
+          } else {
+            info.itemType
+          }
+
+        info = info.copy(
+          itemType = itemType,
+          signature = h4.text.trim.replaceAll("\\s+", " ")
+        )
+      })
+
+    //val extractMembers =
+    // "#allMembers li" #> {
+    //  }
+
+    val extractAll =
+      extractType andThen
+      extractName &
+      extractSignature
+
+    { ns: NodeSeq =>
+      extractAll(ns)
+
+      if (extracted)
+        assignmentFn(info)
+
+      ns
+    }
+  }
+
   if (args.length < 1) {
     Console.err.println(
       "Expected one argument: the base directory of the API documentation to add search to."
@@ -67,6 +156,8 @@ object AddSearchToApiDocs extends App {
         Stream.empty
       }
 
+    var apiInfo = List[ApiInfo]()
+
     val conversionResults: Box[List[Unit]] =
       files.map {
         case FileInfo(file, fileContents, nestLevel) =>
@@ -76,7 +167,8 @@ object AddSearchToApiDocs extends App {
             val libPath = s"$directoryAdjustment/lib/search.js"
 
             val transforms =
-              "head *+" #> <script type="text/javascript" src={libPath}></script>
+              "head *+" #> <script type="text/javascript" src={libPath}></script> andThen
+              extractApiInfo(apiInfo ::= _)
 
             Html5.write(
               transforms(docHtml)(0),
@@ -86,6 +178,8 @@ object AddSearchToApiDocs extends App {
             )
           }
       }.toList.toSingleBox("Conversions failed; got errors:")
+
+    println(apiInfo)
 
     conversionResults match {
       case ParamFailure(message, _, _, boxes: List[_]) =>
