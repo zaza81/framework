@@ -11,6 +11,8 @@ import util.Html5
 import util.Helpers._
 
 
+case class FileInfo(file: File, contents: String, nestLevel: Int)
+
 object AddSearchToApiDocs extends App {
   object FileWithContents {
     def unapply(file: File): Option[(File, String)] = {
@@ -18,18 +20,18 @@ object AddSearchToApiDocs extends App {
     }
   }
 
-  def apiFilesForDirectory(directoryFile: File): Stream[(File,String)] = {
+  def apiFilesForDirectory(directoryFile: File, nestLevel: Int): Stream[FileInfo] = {
     directoryFile.listFiles.toStream flatMap {
       case file if file.getName.endsWith(".html") =>
-        tryo(Source.fromFile(file).mkString).map((file, _)).toStream
+        tryo(Source.fromFile(file).mkString).map(FileInfo(file, _, nestLevel)).toStream
       case directoryFile if directoryFile.isDirectory =>
-        apiFilesForDirectory(directoryFile)
+        apiFilesForDirectory(directoryFile, nestLevel + 1)
       case _ =>
         Stream.empty
     }
   }
 
-  def apiFiles: Box[Stream[(File,String)]] = {
+  def apiFiles: Box[Stream[FileInfo]] = {
     val baseFile = new File(args(0))
 
     for {
@@ -38,7 +40,7 @@ object AddSearchToApiDocs extends App {
           .filter(_.exists) ?~ s"'$baseFile' should be a directory, but does not exist.")
           .filter(_.isDirectory) ?~ s"'$baseFile' should be a directory, not a file.")
     } yield {
-      apiFilesForDirectory(apiDirectory)
+      apiFilesForDirectory(apiDirectory, 0)
     }
   }
 
@@ -67,11 +69,14 @@ object AddSearchToApiDocs extends App {
 
     val conversionResults: Box[List[Unit]] =
       files.map {
-        case (file, fileContents) =>
+        case FileInfo(file, fileContents, nestLevel) =>
           println(s"Processing ${file.getName}")
           Html5.parse(fileContents).map { docHtml =>
+            val directoryAdjustment = (1 to nestLevel).map(_ => "..").mkString("/")
+            val libPath = s"$directoryAdjustment/lib/search.js"
+
             val transforms =
-              "head *+" #> <script type="text/javascript" src="../../../lib/search.js"></script>
+              "head *+" #> <script type="text/javascript" src={libPath}></script>
 
             Html5.write(
               transforms(docHtml)(0),
