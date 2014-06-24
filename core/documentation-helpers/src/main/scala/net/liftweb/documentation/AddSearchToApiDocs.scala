@@ -10,7 +10,25 @@ import common._
 import util.Html5
 import util.Helpers._
 
+
 object AddSearchToApiDocs extends App {
+  object FileWithContents {
+    def unapply(file: File): Option[(File, String)] = {
+      tryo(Source.fromFile(file).mkString).map((file, _))
+    }
+  }
+
+  def apiFilesForDirectory(directoryFile: File): Stream[(File,String)] = {
+    directoryFile.listFiles.toStream flatMap {
+      case file if file.getName.endsWith(".html") =>
+        tryo(Source.fromFile(file).mkString).map((file, _)).toStream
+      case directoryFile if directoryFile.isDirectory =>
+        apiFilesForDirectory(directoryFile)
+      case _ =>
+        Stream.empty
+    }
+  }
+
   def apiFiles: Box[Stream[(File,String)]] = {
     val baseFile = new File(args(0))
 
@@ -20,13 +38,7 @@ object AddSearchToApiDocs extends App {
           .filter(_.exists) ?~ s"'$baseFile' should be a directory, but does not exist.")
           .filter(_.isDirectory) ?~ s"'$baseFile' should be a directory, not a file.")
     } yield {
-      for {
-        file <- apiDirectory.listFiles.toStream
-          if file.getName.endsWith(".html")
-        fileContents <- tryo(Source.fromFile(file).mkString)
-      } yield {
-        (file, fileContents)
-      }
+      apiFilesForDirectory(apiDirectory)
     }
   }
 
