@@ -1,4 +1,4 @@
-package net.liftweb.markdown
+package net.liftweb.commonmark
 
 /*
  * Copyright 2013 WorldWide Conferencing, LLC

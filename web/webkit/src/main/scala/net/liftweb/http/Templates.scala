@@ -137,7 +137,7 @@ object Templates {
   private def parseMarkdown(is: InputStream, needAutoSurround: Boolean): Box[NodeSeq] =
   for {
     bytes <- Helpers.tryo(Helpers.readWholeStream(is))
-    elems <- MarkdownParser.parse(new String(bytes, "UTF-8"))
+    elems <- CommonMarkParser.parse(new String(bytes, "UTF-8"))
   } yield {
     if (needAutoSurround)
       <lift:surround with="default" at="content">{elems}</lift:surround>
