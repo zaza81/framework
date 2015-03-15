@@ -1,5 +1,5 @@
 /*
- * Copyright 2007-2011 WorldWide Conferencing, LLC
+ * Copyright 2007-2015 WorldWide Conferencing, LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -38,295 +38,48 @@ final case class CometCreationInfo(cometType: String,
                                    cometAttributes: Map[String, String],
                                    session: LiftSession)
 
-trait DeltaTrait {
-  def toJs: JsCmd
-}
-
-trait CometState[DeltaType <: DeltaTrait,
-MyType <: CometState[DeltaType, MyType]] {
-  self: MyType =>
-
-  def -(other: MyType): Seq[DeltaType]
-
-  def render: NodeSeq
-}
-
-trait CometStateWithUpdate[UpdateType, DeltaType <: DeltaTrait,
-MyType <: CometStateWithUpdate[UpdateType,
-  DeltaType, MyType]]
-  extends CometState[DeltaType, MyType] {
-  self: MyType =>
-  def process(in: UpdateType): MyType
-}
-
-trait StatefulComet extends CometActor {
-  type Delta <: DeltaTrait
-  type State <: CometState[Delta, State]
-
-  /**
-   * Test the parameter to see if it's an updated state object
-   */
-  def testState(in: Any): Box[State]
-
-  /**
-   * Return the empty state object
-   */
-  def emptyState: State
-
-  /**
-   * The current state objects
-   */
-  protected var state: State = emptyState
-
-  /**
-   * If there's some ThreadLocal variable that needs to be set up
-   * before processing the state deltas, set it up here.
-   */
-  protected def setupLocalState[T](f: => T): T = f
-
-  private[http] override val _lowPriority = {
-    val pf: PartialFunction[Any, Unit] = {
-      case v if testState(v).isDefined =>
-        testState(v).foreach {
-          ns =>
-            if (ns ne state) {
-              val diff = ns - state
-              state = ns
-              partialUpdate(setupLocalState {
-                diff.map(_.toJs).foldLeft(Noop)(_ & _)
-              })
-            }
-        }
-    }
-
-    pf orElse super._lowPriority
-  }
-
-  /**
-   * The Render method
-   */
-  def render = state.render
-}
-
-object CurrentCometActor extends ThreadGlobal[LiftCometActor]
-
-object AddAListener {
-  def apply(who: SimpleActor[Any]) = new AddAListener(who, {
-    case _ => true
-  })
-}
-
 /**
- * This is a message class for use with ListenerManager and CometListener
- * instances. The use of the shouldUpdate function is deprecated, and
- * should instead be handled by the message processing partial functions
- * on the CometListener instances themselves.
+ * Base trait specifying the core interface for Lift's comet actors. The most
+ * interesting implementing classes are the `[[MessagingCometActor]]` and
+ * `[[RenderingCometActor]]` classes, which provide simple message push and more
+ * complex component rendering and rerendering, respectively.
  *
- * @see CometListener
- * @see ListenerManager
+ * The fundamental behavior of comet actors is as regular `[[LiftActor]]`s, with
+ * some helper functions to assist in sending updates to the client. The core
+ * interface also provides functions that give insight into the lifecycle of the
+ * actor, including information about the last time an update was sent to the
+ * client and various timeouts and error handlers.
+ *
+ * Note that like most actors, you should never interact with actor state
+ * directly; instead, _all_ actions should send a message to the actor, and
+ * state should be managed in the message handler. This avoids concurrency
+ * issues with simultaneous updaters of the actor's state.
+ *
+ * Functions invoked from the client via `[[S.fmapFunc]]`, including form field
+ * bindings, can interact with comet state directly as long as they are bound
+ * inside the comet actor's message handler. Lift transparently invokes these
+ * callbacks via a message sent to the actor so they are coherent with the rest
+ * of the actor's state.
  */
-case class AddAListener(who: SimpleActor[Any], shouldUpdate: PartialFunction[Any, Boolean])
-
-/**
- * This is a message class for use with ListenerManager and CometListener
- * instances.
- *
- * @see CometListener
- * @see ListenerManager
- */
-case class RemoveAListener(who: SimpleActor[Any])
-
-
-object ListenerManager {
-  type ActorTest = (SimpleActor[Any], PartialFunction[Any, Boolean])
-}
-
-
-/**
- * This trait manages a set of Actors in a publish/subscribe pattern. When you extend your Actor with
- * this trait, you automatically get handling for sending messages out to all subscribed Actors. Simply
- * override the high-, medium-, or lowPriority handlers to do your message processing. When you want to update
- * all subscribers, just call the updateListeners method. The createUpdate method is used to generate
- * the message that you want sent to all subscribers.
- *
- * Note that the AddAListener and RemoveAListener messages (for subscription control) are processed
- * after any highPriority or mediumPriority messages are processed, so take care to avoid overly
- * broad matches in those handlers that might consume internal messages.
- *
- * For example, you could write a simple service to provide clock ticks using the following code:
- *
- * <pre name="code" class="scala">
- * case object Tick
- *
- * object Ticker extends ListenerManager with LiftActor {
- *   import net.liftweb.util.ActorPing
- *
- *   // Set up the initial tick
- *   ActorPing.schedule(this, Tick, 1000L)
- *
- *   // This is a placeholder, since we're only interested
- *   // in Ticks
- *   def createUpdate = "Registered"
- *
- *   override def mediumPriority = {
- *     case Tick => {
- *       sendListenersMessage(Tick)
- *       ActorPing.schedule(this, Tick, 1000L)
- * }
- * }
- * }
- * </pre>
- *
- * A client CometActor could look like:
- *
- * <pre name="code" class="scala">
- * class CometClock extends CometListener {
- *   val registerWith = Ticker
- *
- *   ... handling code ...
- * }
- * </pre>
- *
- * @see CometListener
- *
- */
-trait ListenerManager {
-  self: SimpleActor[Any] =>
-
-  import ListenerManager._
-
-  /**
-   * This is the list of all registered actors
-   */
-  private var listeners: List[ActorTest] = Nil
-
-  protected def messageHandler: PartialFunction[Any, Unit] =
-    highPriority orElse mediumPriority orElse
-      listenerService orElse lowPriority
-
-  protected def listenerService: PartialFunction[Any, Unit] = {
-    case AddAListener(who, wantsMessage) =>
-      val pair = (who, wantsMessage)
-      listeners ::= pair
-
-      updateListeners(pair :: Nil)
-
-    case RemoveAListener(who) =>
-      listeners = listeners.filter(_._1 ne who)
-      if (listeners.isEmpty) {
-        onListenersListEmptied()
-      }
-  }
-
-  /**
-   * Called after RemoveAListener-message is processed and no more listeners exist.
-   * Default does nothing.
-   */
-  protected def onListenersListEmptied() {
-  }
-
-  /**
-   * Update the listeners with the message generated by createUpdate
-   */
-  protected def updateListeners(listeners: List[ActorTest] = listeners) {
-    val update = createUpdate
-
-    listeners foreach {
-      case (who, wantsMessage) if wantsMessage.isDefinedAt(update) && wantsMessage(update) =>
-        who ! update
-    }
-  }
-
-  /**
-   * Send a message we create to all of the listeners. Note that with this
-   * invocation the createUpdate method is not used.
-   */
-  protected def sendListenersMessage(msg: Any) {
-    listeners foreach (_._1 ! msg)
-  }
-
-  /**
-   * This method is called when the <pre>updateListeners()</pre> method
-   * needs a message to send to subscribed Actors. In particular, createUpdate
-   * is used to create the first message that a newly subscribed CometListener
-   * will receive.
-   */
-  protected def createUpdate: Any
-
-  /**
-   * Override this method to process high priority messages. Note:
-   * <b>you must not process messages with a wildcard (match all)</b>, since
-   * this will intercept the messages used for subscription control.
-   */
-  protected def highPriority: PartialFunction[Any, Unit] = Map.empty
-
-  /**
-   * Override this method to process medium priority messages. See
-   * the highPriority method for an important note on wildcard
-   * processing.
-   *
-   * @see #highPriority
-   */
-  protected def mediumPriority: PartialFunction[Any, Unit] = Map.empty
-
-  /**
-   * Override this method to process low priority messages.
-   */
-  protected def lowPriority: PartialFunction[Any, Unit] = Map.empty
-}
-
-/**
- * A LiftActorJ with ListenerManager.  Subclass this class
- * to get a Java-usable LiftActorJ with ListenerManager
- */
-abstract class LiftActorJWithListenerManager extends LiftActorJ with ListenerManager {
-  protected override def messageHandler: PartialFunction[Any, Unit] =
-    highPriority orElse mediumPriority orElse
-      listenerService orElse lowPriority orElse _messageHandler
-}
-
-/**
- * This trait adds functionality to automatically register with a given
- * Actor using AddAListener and RemoveAListener control messages. The most
- * typical usage would be to register with an instance of ListenerManager.
- * You will need to provide a def/val for the <pre>registerWith</pre> member
- * to control which Actor to connect to.
- *
- * See ListenerManager for a complete example.
- *
- * @see ListenerManager
- */
-trait CometListener extends BaseCometActor {
-  self: BaseCometActor =>
-
-  /**
-   * This controls which Actor to register with for updates. Typically
-   * this will be an instance of ListenerActor, although you can provide
-   * your own subscription handling on top of any SimpleActor.
-   */
-  protected def registerWith: SimpleActor[Any]
-
-  abstract override protected def localSetup() {
-    registerWith ! AddAListener(this,  { case _ => true })
-    super.localSetup()
-  }
-
-  abstract override protected def localShutdown() {
-    registerWith ! RemoveAListener(this)
-    super.localShutdown()
-  }
-}
-
 trait LiftCometActor extends TypedActor[Any, Any] with ForwardableActor[Any, Any] with Dependent {
+  /**
+   * An id that identifies this comet uniquely, preferably universally
+   * so. Typically generated at instantiation time via
+   * `[[HttpHelpers.nextFuncName]]`.
+   */
   def uniqueId: String
 
   /**
-   * The last "when" sent from the listener
-   * @return the last when sent from the listener
+   * The timestamp when we last saw a listener initiate or terminate a
+   * connection.
    */
   def lastListenerTime: Long
+
+  @deprecated("lastRenderTime only makes sense on MessagingCometActors and will be removed from the LiftCometActor interface.", "3.1.0")
   def lastRenderTime: Long
 
+  // Exposes initCometActor for internal invocation by Lift when external
+  // initialization is needed.
   private[http] def callInitCometActor(creationInfo: CometCreationInfo) {
     initCometActor(creationInfo)
   }
@@ -334,89 +87,119 @@ trait LiftCometActor extends TypedActor[Any, Any] with ForwardableActor[Any, Any
   /**
    * Override in sub-class to customise timeout for the render()-method for the specific comet
    */
-  def cometRenderTimeout = LiftRules.cometRenderTimeout
+  @deprecated("cometRenderTimeout only makes sense on RenderingCometActors and will be removed from the LiftCometActor interface. It will also be made protected.", "3.1.0")
+  def cometRenderTimeout: Long // = LiftRules.cometRenderTimeout
 
   /**
-   * Override in sub-class to customise timeout for AJAX-requests to the comet-component for the specific comet
+   * Provides the base rendering for a `RenderingCometActor` that failed to finish rendering
+   * within `[[cometRenderTimeout]]` milliseconds of being asked
+   * to. `RenderingCometActor`s have `cometRenderTimeout` milliseconds to finish
+   * their initial rendering; if they have not finished within that timeframe,
+   * this method provides the fallback content.
+   * 
+   * Do _not_ manipulate actor-state here. If you want to manipulate state, send
+   * the actor a new message from inside this method. Because it is called in
+   * reaction to a message taking too long to process, it is invoked outside of
+   * the usual message handling pipeline.
+   * 
+   * A possible render timeout handler:
+   * {{{
+   *   override def renderTimeoutHandler(): Box[NodeSeq] = {
+   *     Full(<div>Comet {this.getClass} timed out, timeout is {cometRenderTimeout}ms</div>)
+   *   }
+   * }}}
    */
+  @deprecated("cometRenderTimeoutHandler only makes sense on RenderingCometActors and will be removed from the LiftCometActor interface. It will also be made protected.", "3.1.0")
+  def cometRenderTimeoutHandler(): Box[NodeSeq] = Empty
+
+  @deprecated("cometProcessingTimeout is no longer used and will be removed.", "3.1.0")
   def cometProcessingTimeout = LiftRules.cometProcessingTimeout
 
-  /**
-   * This is to react to comet-requests timing out.
-   * When the timeout specified in {@link LiftRules#cometProcessingTimeout} occurs one may override
-   * this to send a message to the user informing of the timeout.
-   * <p/><p/>
-   * Do NOT manipulate actor-state here. If you want to manipulate state, send the actor a new message.
-   * <p/><p/>
-   * Typical example would be:
-   * <pre>
-   *   override def cometTimeoutHandler(): JsCmd = {
-   *     Alert("Timeout processing comet-request, timeout is: " + cometProcessingTimeout + "ms")
-   * }
-   * </pre>
-   */
+  @deprecated("cometProcessingTimeoutHandler is no longer used and will be removed.", "3.1.0")
   def cometProcessingTimeoutHandler(): JsCmd = Noop
-
-  /**
-   * This is to react to comet-actors timing out while initial rendering, calls to render().
-   * When the timeout specified in {@link LiftRules#cometRenderTimeout} occurs one may override
-   * this to customise the output.
-   * <p/><p/>
-   * Do NOT manipulate actor-state here. If you want to manipulate state, send the actor a new message.
-   * <p/><p/>
-   * Typical example would be:
-   * <pre>
-   *   override def renderTimeoutHandler(): Box[NodeSeq] = {
-   *     Full(&lt;div&gt;Comet {this.getClass} timed out, timeout is {cometRenderTimeout}ms&lt;/div&gt;)
-   * }
-   * </pre>
-   */
-  def cometRenderTimeoutHandler(): Box[NodeSeq] = Empty
 
   protected def initCometActor(creationInfo: CometCreationInfo): Unit
 
+  /**
+   * A `String` describing what type of comet this is. Comets without types are
+   * no longer well supported, and the ability to override `theType` will soon
+   * disappear, as a comet's type is used for internal tracking and lookup, and
+   * provided to the comet as part of its setup process.
+   */
   def theType: Box[String]
 
+  /**
+   * A customizable name for this comet, possibly empty. The ability to override
+   * `name` will soon disappear, as the comet's name is used for internal
+   * tracking and lookup, and provided to the comet as part of its setup
+   * process.
+   */
   def name: Box[String]
 
+  /**
+   * Indicates whether, when rendered, this comet's contents should be
+   * surrounded by a generated container.
+   */
+  @deprecated("hasOuter only makes sense on RenderingCometActors and will be removed from the LiftCometActor interface.", "3.1.0")
   def hasOuter: Boolean
 
+  /**
+   * Builds a container for the rendered contents of this `RenderingCometActor`,
+   * based on the value of `[[parentTag]]`.
+   */
+  @deprecated("buildSpan only makes sense on RenderingCometActors and will be removed from the LiftCometActor interface and renamed to buildContainer.", "3.1.0")
   def buildSpan(xml: NodeSeq): NodeSeq
 
+  /**
+   * A template `Elem` for the container this `RenderingCometActor`'s rendered
+   * contents will be wrapped in if `hasOuter` is `true`.
+   */
+  @deprecated("parentTag only makes sense on RenderingCometActors and will be removed from the LiftCometActor interface and renamed to containerElement.", "3.1.0")
   def parentTag: Elem
 
   /**
-   * Poke the CometActor and cause it to do a partial update Noop which
-   * will have the effect of causing the component to redisplay any
-   * Wiring elements on the component.
-   * This method is Actor-safe and may be called from any thread, not
-   * just the Actor's message handler thread.
+   * See `[[flushWiringUpdates]]`.
    */
-  def poke(): Unit = {}
+  @deprecated("Use flushWiringUpdates instead.","3.1.0")
+  def poke(): Unit = flushWiringUpdates
 
   /**
-   * Is this CometActor going to capture the initial Req
-   * object?  If yes, override this method and return true
-   * and override captureInitialReq to capture the Req.  Why
-   * have to explicitly ask for the Req? In order to send Req
-   * instances across threads, the Req objects must be snapshotted
-   * which is the process of reading the POST or PUT body from the
-   * HTTP request stream.  We don't want to do this unless we
-   * have to, so by default the Req is not snapshotted/sent.  But
-   * if you want it, you can have it.
+   * Make this actor flush any `Wiring` updates in the component.
+   *
+   * This method is actor-safe and may be called from any thread, not just the
+   * Actor's message handler thread.
+   */
+  def flushWiringUpdates(): Unit = {}
+
+  /**
+   * Indicates whether this comet actor intends to capture the `[[Req]]`s that
+   * add the comet. Note that a single comet actor can exist on multiple pages,
+   * and that in these cases, only the first request that causes the comet to be
+   * created is made available for capture.
+   *
+   * Setting this to `true` ensures that the request that is handed to the
+   * `[[captureInitialReq]]` method is snapshotted, meaning that its body is
+   * fully read and stored. For performance reasons, this is only done when
+   * explicitly requested, so this flag will ensure that that step is performed
+   * before the comet gets an opportunity to read it.
+   *
+   * Note that you'll also have to override `captureInitialReq` to actually
+   * store the `Req`; by default, that method is a no-op.
    */
   def sendInitialReq_? : Boolean = false
 
+  // FIXME Does this only makes sense for RenderingCometActor?
   /**
-   * If the predicate cell changes, the Dependent will be notified
+   * Hook for `Wiring` to notify this comet actor when a `[[Cell]]` bound from
+   * within the actor was changed.
    */
   def predicateChanged(which: Cell[_]): Unit = {
-    poke()
+    flushWiringUpdates()
   }
 
-
   /**
-   * The locale for the session that created the CometActor
+   * The locale to be used for this comet actor. By default, this is set to the
+   * creating session's locale when the actor is initialized.
    */
   def cometActorLocale: Locale = _myLocale
 
@@ -428,36 +211,10 @@ trait LiftCometActor extends TypedActor[Any, Any] with ForwardableActor[Any, Any
 }
 
 /**
- * Subclass from this class if you're in Java-land
- * and want a CometActor
+ * Provides access to the current comet actor, if we are currently handling
+ * messages for a comet actor. Usually accessed through `[[S.comet]]`.
  */
-abstract class CometActorJ extends LiftActorJ with CometActor {
-
-  override def lowPriority = _messageHandler
-
-}
-
-/**
- * Subclass from this class if you want a CometActorJ with
- * CometListeners
- */
-abstract class CometActorJWithCometListener extends CometActorJ with CometListener {
-  override def lowPriority = _messageHandler
-}
-
-trait CometActor extends BaseCometActor {
-  override final private[http] def partialUpdateStream_? = false
-}
-
-trait MessageCometActor extends BaseCometActor {
-  override final private[http] def partialUpdateStream_? = true
-
-  override final def render = NodeSeq.Empty
-
-  protected def pushMessage(cmd: => JsCmd) {
-    partialUpdate(cmd)
-  }
-}
+object CurrentCometActor extends ThreadGlobal[LiftCometActor]
 
 /**
  * Takes care of the plumbing for building Comet-based Web Apps
@@ -1380,6 +1137,46 @@ trait BaseCometActor extends LiftActor with LiftCometActor with CssBindImplicits
 
 }
 
+trait CometActor extends BaseCometActor {
+  override final private[http] def partialUpdateStream_? = false
+
+  // Temporary placeholder until we can split out `BaseCometActor` stuff
+  // properly.
+  def cometRenderTimeout: Long = LiftRules.cometRenderTimeout
+}
+
+// Temporary placeholder until we can split out `BaseCometActor` stuff properly.
+trait RenderingCometActor extends CometActor
+
+trait MessagingCometActor extends BaseCometActor {
+  override final private[http] def partialUpdateStream_? = true
+
+  override final def render = NodeSeq.Empty
+
+  // Temporary placeholder until we can split out `BaseCometActor` stuff
+  // properly.
+  def cometRenderTimeout: Long = LiftRules.cometRenderTimeout
+
+  protected def pushMessage(cmd: => JsCmd) {
+    partialUpdate(cmd)
+  }
+}
+
+/**
+ * Subclass from this class if you're in Java-land and want a `[[CometActor]]`.
+ */
+abstract class CometActorJ extends LiftActorJ with CometActor {
+  override def lowPriority = _messageHandler
+}
+
+/**
+ * Subclass from this class if you want a `[[CometActorJ]]` with
+ * `[[CometListener]]` functionality.
+ */
+abstract class CometActorJWithCometListener extends CometActorJ with CometListener {
+  override def lowPriority = _messageHandler
+}
+
 abstract class Delta(val when: Long) {
   def js: JsCmd
 
@@ -1518,14 +1315,25 @@ object Notice {
 }
 
 /**
- * The RenderOut case class contains the rendering for the CometActor.
- * Because of the implicit conversions, RenderOut can come from
- * <br/>
- * @param xhtml is the "normal" render body
- * @param fixedXhtml is the "fixed" part of the body.  This is ignored unless reRender(true)
- * @param script is the script to be executed on render.  This is where you want to put your script
- * @param destroyScript is executed when the comet widget is redrawn ( e.g., if you register drag or mouse-over or some events, you unregister them here so the page doesn't leak resources.)
- * @param ignoreHtmlOnJs -- if the reason for sending the render is a Comet update, ignore the xhtml part and just run the JS commands.  This is useful in IE when you need to redraw the stuff inside <table><tr><td>... just doing innerHtml on <tr> is broken in IE
+ * The `RenderOut` case class encapsulates the data rendered for a
+ * `[[RenderingCometActor]]`'s rendering.
+ * Thanks to implicit conversions, a `RenderOut` in a comet can come from:
+ *  - `[[NodeSeq]]` or `[[Elem]]`
+ *  - `[[JsCmd]]`
+ *  - `(NodeSeq)=>NodeSeq` or `[[CssSel]]`
+ * 
+ * @param html The base HTML to display.
+ * @param fixedXhtml The "fixed" part of the body.  This is ignored unless
+ *        `[[reRender]]` is called with `true` as its first parameter.
+ * @param script Any JavaScript to be executed on render.
+ * @param destroyScript Executed when the comet widget is redrawn; useful to
+ *        clean up after setup that `script` does (e.g., if you register drag or
+ *        mouse-over or some events, you unregister them here so the page
+ *        doesn't leak resources.)
+ * @param ignoreHtmlOnJs If the reason for sending the render is a Comet update,
+ *        ignore the xhtml part and just run the JS commands.  This is useful
+ *        in IE when you need to redraw the stuff inside `<table><tr><td>...`,
+ *        since just using `innerHtml` on `<tr>` is broken in IE.
  */
 case class RenderOut(xhtml: Box[NodeSeq], fixedXhtml: Box[NodeSeq], script: Box[JsCmd], destroyScript: Box[JsCmd], ignoreHtmlOnJs: Boolean) {
   def this(xhtml: NodeSeq) = this (Full(xhtml), Empty, Empty, Empty, false)
