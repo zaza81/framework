@@ -30,8 +30,9 @@ import JE._
 import java.util.Locale
 
 /**
-* A case class that contains the information necessary to set up a CometActor
-*/
+ * A case class that contains the information necessary to set up a
+ * `[[LiftCometActor]]`.
+ */
 final case class CometCreationInfo(cometType: String,
                                    cometName: Box[String],
                                    cometHtml: NodeSeq,
@@ -221,25 +222,8 @@ object CurrentCometActor extends ThreadGlobal[LiftCometActor]
  */
 trait BaseCometActor extends LiftActor with LiftCometActor with CssBindImplicits {
   private val logger = Logger(classOf[CometActor])
+
   val uniqueId = Helpers.nextFuncName
-  private var spanId = uniqueId
-  @volatile private var _lastRenderTime =
-    if (partialUpdateStream_?)
-      0
-    else
-      Helpers.nextNum
-
-  /**
-   * If we're going to cache the last rendering, here's the
-   * private cache
-   */
-  private[this] var _realLastRendering: RenderOut = _
-
-  /**
-   * Get the current render clock for the CometActor
-   * @return
-   */
-  def renderClock: Long = lastRenderTime
 
   @volatile
   private var _lastListenerTime: Long = millis
@@ -249,8 +233,6 @@ trait BaseCometActor extends LiftActor with LiftCometActor with CssBindImplicits
    * @return the last when sent from the listener
    */
   def lastListenerTime: Long = _lastListenerTime
-
-  def lastRenderTime: Long =  _lastRenderTime
 
   /**
     * If this method returns true, this CometActor will be treated as a source
@@ -264,42 +246,11 @@ trait BaseCometActor extends LiftActor with LiftCometActor with CssBindImplicits
     * push arbitrary JavaScript to the client without a distinct UI for the
     * comet actor itself.
     */
-  private[http] def partialUpdateStream_? : Boolean = false
+  //private[http] def partialUpdateStream_? : Boolean = false
 
-  /**
-   * The last rendering (cached or not)
-   */
-  private def lastRendering: RenderOut =
-    if (dontCacheRendering) {
-      val ret =
-        if (partialUpdateStream_?)
-          nsToNsFuncToRenderOut(_ => NodeSeq.Empty)
-        else
-          render
-      theSession.updateFunctionMap(S.functionMap, uniqueId, lastRenderTime)
-      ret
-    } else {
-      _realLastRendering
-    }
+  @transient private var listeners: List[(ListenerId, AnswerRender => Unit)] = Nil
 
-  /**
-   * set the last rendering... ignore if we're not caching
-   */
-  private def lastRendering_=(last: RenderOut) {
-    if (!dontCacheRendering) {
-      _realLastRendering = last
-    }
-  }
-
-  private var receivedDelta = false
-  private var wasLastFullRender = false
-  @transient
-  private var listeners: List[(ListenerId, AnswerRender => Unit)] = Nil
-  private var askingWho: Box[LiftCometActor] = Empty
-  private var whosAsking: Box[LiftCometActor] = Empty
-  private var answerWith: Box[Any => Any] = Empty
-  private var deltas: List[Delta] = Nil
-  private var jsonHandlerChain: PartialFunction[Any, JsCmd] = Map.empty
+  protected var deltas: List[Delta] = Nil
   private val notices = new ListBuffer[(NoticeType.Value, NodeSeq, Box[String])]
 
   private var _deltaPruner: (BaseCometActor, List[Delta]) => List[Delta] =
@@ -312,61 +263,104 @@ trait BaseCometActor extends LiftActor with LiftCometActor with CssBindImplicits
 
   def theSession = _theSession
 
+  private var _name: Box[String] = Empty
+
   @volatile private var _defaultHtml: NodeSeq = _
 
   /**
-   * The template that was passed to this component during comet
-   * initializations
+   * If this comet was initialized from a `[[Comet]]` snippet
+   * invocation, contains the contents of the snippet. For example, for
+   * this invocation:
+   *
+   * {{{
+   * <div data-lift="comet?type=MagicComet">
+   *   <p>Some text</p>
+   * </div>
+   * }}}
+   *
+   * `defaultHtml` would be `<p>Some text</p>` after comet
+   * initialization.
    */
   def defaultHtml: NodeSeq = _defaultHtml
 
-  private var _name: Box[String] = Empty
-
   /**
-   * The optional name of this CometActors
+   * The optional name for this comet. This can be used to send messages
+   * to just this instance. A given comet [[theType type]] + name
+   * combination is unique across a single Lift session.
    */
   def name: Box[String] = _name
 
+  // FIXME This is no longer optional, should become a `String`.
   private var _theType: Box[String] = Empty
 
   /**
-   * The optional type of this CometActor
+   * The type of this comet. Often corresponds to the name of the comet
+   * class, but if you use `[[LiftRules.cometCreation]]` or
+   * `[[LiftRules.cometCreationFactory]]`, that may not be the case.
    */
   def theType: Box[String] = _theType
 
   private var _attributes: Map[String, String] = Map.empty
 
+  /**
+   * If this comet was initialized from a `[[Comet]]` snippet
+   * invocation, contains the attributes passed to that snippet. For
+   * example, for this invocation:
+   *
+   * {{{
+   * <div data-lift="comet?type=MagicComet&name=Hello&myAttribute=13"
+   * }}}
+   *
+   * `attributes` would be, roughly, `("type" -> "Magic", "name" ->
+   * "Hello", "myAttribute" -> "13")`.
+   */
   def attributes = _attributes
 
   /**
-   * The lifespan of this component.  By default CometActors
-   * will last for the entire session that they were created in,
-   * even if the CometActor is not currently visible.  You can
-   * set the lifespan of the CometActor.  If the CometActor
-   * isn't visible on any page for some period after its lifespan
-   * the CometActor will be shut down.
+   * The lifespan of this comet.  By default `lifespan` is `Empty`,
+   * meaning a `LiftCometActor` will last for the entire session that it
+   * was created in, even if the comet is not currently on a page the
+   * user has open.
+   * 
+   * When set to `Full`, the comet will be shut down if it is not seen
+   * on a page for some amount of time after the `lifespan` has
+   * passed. How long after the `lifespan` a comet will be killed is
+   * not precisely defined, though it should be within 30s.
+   *
+   * A comet is "seen" on a page when a request is opened from a client
+   * browser that is waiting for updates from it, or when such a request
+   * is closed. Thus, if the `lifespan` is less than the
+   * `[[LiftRules.cometRequestTimeout]]`, you run the risk of the actor
+   * being killed while it is still visible on a page (because we only
+   * see it when the request in question starts and ends, not in
+   * between).
    */
   def lifespan: Box[TimeSpan] = Empty
 
-  private var _running = true
-
+  // Used to find out when we shut the comet down to control running
+  // further messages.
   private var _shutDownAt = millis
 
+  private var _running = true
+
   /**
-   * Is the CometActor running?
+   * True if the actor is currently running, false if it has been shut
+   * down.
+   *
+   * A comet can be explicitly shut down by sending it a `ShutDown`
+   * message, or it can be automatically shut down when a session is
+   * being shut down or when the comet has lived past its
+   * `[[lifespan]]`.
    */
   protected def running = _running
 
   /**
-   * It's seriously suboptimal to override this method.  Instead
-   * use localSetup()
+   * Initializes the comet actor. Generally you should override
+   * `localSetup` rather than this method; this method is mostly
+   * meant for traits and classes that significantly modify the comet
+   * lifecycle.
    */
   protected def initCometActor(creationInfo: CometCreationInfo) {
-    if (!dontCacheRendering) {
-      lastRendering = RenderOut(Full(defaultHtml),
-        Empty, Empty, Empty, false)
-    }
-
     _theType = Full(creationInfo.cometType)
     _name = creationInfo.cometName
     _defaultHtml = creationInfo.cometHtml
@@ -374,93 +368,95 @@ trait BaseCometActor extends LiftActor with LiftCometActor with CssBindImplicits
     _theSession = creationInfo.session
   }
 
+  @deprecated("Originally used as a default prefix for old-style binding, now barely used; will be removed in Lift 3.1.0; JSON functions will be tagged in a comment with the comet type + name instead of the default prefix.", "3.0.0")
   def defaultPrefix: Box[String] = Empty
 
+  // FIXME Make this be type + name, and do it after type is mandatory.
   private lazy val _defaultPrefix: String = (defaultPrefix or _name) openOr "comet"
 
   /**
-   * Set to 'true' if we should run "render" on every page load
-   */
-  protected def alwaysReRenderOnPageLoad = false
-
-  def hasOuter = true
-
-  def parentTag = <div style="display: inline"/>
-
-  /**
-   * Return the list of ListenerIds of all long poll agents that
-   * are waiting for this CometActor to change its state.  This method
-   * is useful for detecting presence.
+   * Return the list of `ListenerId`s for all long poll agents that are
+   * waiting for this CometActor to change its state. This method is
+   * useful for detecting presence.
    */
   protected def cometListeners: List[ListenerId] = listeners.map(_._1)
 
   /**
    * This method will be called when there's a change in the long poll
-   * listeners.  The method does nothing, but allows you to get a granular
-   * sense of how many browsers care about this CometActor.  Note that
-   * this method should not block for any material time and if there's
-   * any processing to do, use Scheduler.schedule or send a message to this
-   * CometActor.  Do not change the Actor's state from this method.
+   * listeners. The method does nothing by default, but you can override
+   * it to get a granular sense of how many browsers care about this
+   * comet (in conjunction with `[[cometListeners]]`).
+   *
+   * Note that this method should not block for any material time, and
+   * if there's any complicated processing to do, you should use
+   * Scheduler.schedule or send a message to the comet. Do not change
+   * the comet's state from this method.
    */
   protected def listenerTransition(): Unit = {}
 
-  /**
-   * Prepends the handler to the Json Handlers.  Should only be used
-   * during instantiation
-   *
-   * @param h -- the PartialFunction that can handle a JSON request
-   */
-  def appendJsonHandler(h: PartialFunction[Any, JsCmd]) {
-    jsonHandlerChain = h orElse jsonHandlerChain
-  }
-
-
+  // FIXME Split out JSON functionality into a trait.
   /**
    * If there's actor-specific JSON behavior on failure to make the JSON
    * call, include the JavaScript here.
    */
   def onJsonError: Box[JsCmd] = Empty
 
+  // FIXME Split out JSON functionality into a trait.
   /**
-   * Override this method to deal with JSON sent from the browser via the sendJson function.  This
-   * is based on the Lift JSON package rather than the handleJson stuff based on the older util.JsonParser.  This
-   * is the preferred mechanism.  If you use the jsonSend call, you will get a JObject(JField("command", cmd), JField("param", params))
+   * Override this method to deal with JSON sent from the browser
+   * via the `[[jsonSend]]` function. If you use the jsonSend call, you
+   * will get a `JObject(JField("command", cmd), JField("param",
+   * params))`.
    */
   def receiveJson: PartialFunction[JsonAST.JValue, JsCmd] = Map()
 
+  // FIXME Split out JSON functionality into a trait.
   /**
-   * The JavaScript call that you use to send the data to the server. For example:
-   * &lt;button onclick={jsonSend("Hello", JsRaw("Dude".encJs))}&gt;Click&lt;/button&gt;
+   * The JavaScript call that you use to send the data to the
+   * server. For example:
+   *
+   * {{{
+   * "button [onclick]" #> jsonSend("Hello", JsRaw("Dude".encJs))
+   * }}}
+   *
+   * See `[[JsonCall]]` for more on the parameters it accepts.
    */
   def jsonSend: JsonCall = _sendJson
 
+  // FIXME Split out JSON functionality into a trait.
   /**
-   * The call that packages up the JSON and tosses it to the server.  If you set autoIncludeJsonCode to true,
-   * then this will be included in the stuff sent to the server.
+   * The call that packages up the JSON and tosses it to the server.  If
+   * you set `[[autoIncludeJsonCode]]` to true, then this will be
+   * included in the stuff sent to the server.
    */
   def jsonToIncludeInCode: JsCmd = _jsonToIncludeCode
 
+  // FIXME Revamp the way `createJsonFunc` works to not produce JS.
+  // FIXME Split out JSON functionality into a trait.
   private lazy val (_sendJson, _jsonToIncludeCode) = S.createJsonFunc(Full(_defaultPrefix), onJsonError, receiveJson _)
 
   /**
-   * Set this method to true to have the Json call code included in the Comet output
+   * Set this method to true to have the Json call code included in the
+   * Comet output
    */
   def autoIncludeJsonCode: Boolean = false
 
   /**
-   * Creates the span element acting as the real estate for comet rendering.
+   * Called to log an exception-related error during message dispatch
+   * along with the exception that caused it.
+   *
+   * By default, simply uses the comet's logger to log at an ERROR
+   * level.
    */
-  def buildSpan(xml: NodeSeq): Elem = {
-    parentTag.copy(child = xml) % ("id" -> spanId)
+  protected def reportError(message: String, exception: Exception) {
+    logger.error(message, exception)
   }
 
   /**
-   * How to report an error that occurs during message dispatch
+   * Wraps `[[composeFunction]]`, which does actual message handling,
+   * with the appropriate session and request state setup. Don't
+   * override this unless you really know what you're doing.
    */
-  protected def reportError(msg: String, exception: Exception) {
-    logger.error(msg, exception)
-  }
-
   protected override def messageHandler = {
     val what = composeFunction
     val myPf: PartialFunction[Any, Unit] = new PartialFunction[Any, Unit] {
@@ -478,7 +474,7 @@ trait BaseCometActor extends LiftActor with LiftCometActor with CssBindImplicits
 
                 val updatedJs = S.jsToAppend
                 if (updatedJs.nonEmpty) {
-                  partialUpdate(updatedJs)
+                  pushMessage(updatedJs)
                 }
 
                 if (S.functionMap.size > 0) {
@@ -512,80 +508,52 @@ trait BaseCometActor extends LiftActor with LiftCometActor with CssBindImplicits
   }
 
   /**
-   * A part of the CometActor's screen real estate that is not
-   * updated by default with reRender().  This block of HTML is
-   * useful for the editor part of a Comet-based control where
-   * the data is JSON and updated with partialUpdates.
+   * By default, `BaseCometActor` handles `RedirectShortcutException`,
+   * which is used to handle many types of redirects in Lift. If you
+   * override this `PartialFunction` to do your own exception handling
+   * and want redirects from e.g. `S.redirectTo` to continue working
+   * correctly, make sure you chain back to this implementation.
    */
-  def fixedRender: Box[NodeSeq] = Empty
-
-  /**
-   * Calculate fixedRender and capture the postpage javascript
-   */
-  protected def calcFixedRender: Box[NodeSeq] =
-    fixedRender.map(ns => theSession.postPageJavaScript() match {
-      case Nil => ns
-      case xs => {
-        ns ++ Script(xs)
-      }
-    })
-
-  /**
-   * We have to cache fixedRender and only change it if
-   * the template changes or we get a reRender(true)
-   */
-  private def internalFixedRender: Box[NodeSeq] =
-    if (!cacheFixedRender) {
-      calcFixedRender
-    } else {
-      cachedFixedRender.get
-    }
-
-  private val cachedFixedRender: FatLazy[Box[NodeSeq]] = FatLazy(calcFixedRender)
-
-  /**
-   * By default, we do not cache the value of fixedRender.  If it's
-   * expensive to recompute it each time there's a conversion
-   * of something to a RenderOut, override this method if you
-   * want to cache fixedRender.
-   */
-  protected def cacheFixedRender = false
-
-  /**
-   * A helpful implicit conversion that takes a NodeSeq => NodeSeq
-   * (for example a CssSel) and converts it to a Box[NodeSeq] by
-   * applying the function to defaultHtml
-   */
-  protected implicit def nodeSeqFuncToBoxNodeSeq(f: NodeSeq => NodeSeq):
-  Box[NodeSeq] = Full(f(defaultHtml))
-
-  /**
-   * By default, `CometActor` handles `RedirectShortcutException`, which is
-   * used to handle many types of redirects in Lift. If you override this
-   * `PartialFunction` to do your own exception handling and want redirects
-   * from e.g. `S.redirectTo` to continue working correctly, make sure you
-   * chain back to this implementation.
-   */
-  override def exceptionHandler : PartialFunction[Throwable, Unit] = {
+  override def exceptionHandler: PartialFunction[Throwable, Unit] = {
     case  ResponseShortcutException(_, Full(redirectUri), _) =>
-      partialUpdate(RedirectTo(redirectUri))
+      pushMessage(RedirectTo(redirectUri))
 
     case other if super.exceptionHandler.isDefinedAt(other) =>
       super.exceptionHandler(other)
   }
 
   /**
-   * Handle messages sent to this Actor before the
+   * Handle messages sent to this actor before anything else.
+   *
+   * Note that if you catch a message needed for the comet lifecycle
+   * here, built-in lifecycle handling won't take place!
    */
   def highPriority: PartialFunction[Any, Unit] = Map.empty
 
+  /**
+   * Handle messages sent to this actor if the built-in message
+   * handling didn't catch it. This is the most common place to install
+   * comet-specific message handling.
+   */
   def lowPriority: PartialFunction[Any, Unit] = Map.empty
 
+  /**
+   * Handle messages sent to this Actor before the built-in message
+   * handling occurs.
+   *
+   * Note that if you catch a message needed for the comet lifecycle
+   * here, built-in lifecycle handling won't take place!
+   */
   def mediumPriority: PartialFunction[Any, Unit] = Map.empty
 
   private[http] def _lowPriority: PartialFunction[Any, Unit] = {
     case s => logger.debug("CometActor " + this + " got unexpected message " + s)
   }
+
+  // TODO Split asking/whosAsking into separate trait?
+  private var askingWho: Box[LiftCometActor] = Empty
+  private var whosAsking: Box[LiftCometActor] = Empty
+  private var answerWith: Box[Any => Any] = Empty
 
   private lazy val _mediumPriority: PartialFunction[Any, Unit] = {
     case l@Unlisten(seq) => {
@@ -767,68 +735,12 @@ trait BaseCometActor extends LiftActor with LiftCometActor with CssBindImplicits
     }
   }
 
-
   /**
-   * It's the main method to override, to define what is rendered by the CometActor
-   *
-   * There are implicit conversions for a bunch of stuff to
-   * RenderOut (including NodeSeq).  Thus, if you don't declare the return
-   * turn to be something other than RenderOut and return something that's
-   * coercible into RenderOut, the compiler "does the right thing"(tm) for you.
-   * <br/>
-   * There are implicit conversions for NodeSeq, so you can return a pile of
-   * XML right here.  There's an implicit conversion for NodeSeq => NodeSeq,
-   * so you can return a function (e.g., a CssBindFunc) that will convert
-   * the defaultHtml to the correct output.  There's an implicit conversion
-   * from JsCmd, so you can return a pile of JavaScript that'll be shipped
-   * to the browser.<br/>
-   * Note that the render method will be called each time a new browser tab
-   * is opened to the comet component or the comet component is otherwise
-   * accessed during a full page load (this is true if a partialUpdate
-   * has occurred.)  You may want to look at the fixedRender method which is
-   * only called once and sets up a stable rendering state.
-   */
-  def render: RenderOut
-
-  /**
-   * Cause the entire component to be reRendered and pushed out
-   * to any listeners.  This method will cause the entire component
-   * to be rendered which can result in a huge blob of JavaScript to
-   * be sent to the client.  It's a much better practice to use
-   * partialUpdate for non-trivial CometActor components.
-   *
-   * @param sendAll -- Should the fixed part of the CometActor be
-   * rendered.
-   */
-  def reRender(sendAll: Boolean) {
-    this ! ReRender(sendAll)
-  }
-
-  /**
-   * Cause the entire component to be reRendered and pushed out
-   * to any listeners.  This method will cause the entire component
-   * to be rendered which can result in a huge blob of JavaScript to
-   * be sent to the client.  It's a much better practice to use
-   * partialUpdate for non-trivial CometActor components.
-   */
-  def reRender() {
-    reRender(false)
-  }
-
-
-  /**
-   * Set this method to true if you want to avoid caching the
-   * rendering.  This trades space for time.
-   */
-  protected def dontCacheRendering: Boolean = false
-
-  /**
-   * Clear the common dependencies for Wiring.  This
-   * method will clearPostPageJavaScriptForThisPage() and
-   * unregisterFromAllDependencies().  The combination
-   * will result in a clean slate for Wiring during a redraw.
-   * You can change the behavior of the wiring dependency management
-   * by overriding this method
+   * Clear the common dependencies for Wiring.  This method will
+   * clearPostPageJavaScriptForThisPage() and unregisterFromAllDependencies().
+   * The combination will result in a clean slate for Wiring during a redraw.
+   * You can change the behavior of the wiring dependency management by
+   * overriding this method.
    */
   protected def clearWiringDependencies() {
     if (!manualWiringDependencyManagement) {
@@ -838,54 +750,14 @@ trait BaseCometActor extends LiftActor with LiftCometActor with CssBindImplicits
   }
 
   /**
-   * By default, Lift deals with managing wiring dependencies.
-   * This means on each full render (a full render will
-   * happen on reRender() or on a page load if there have been
-   * partial updates.) You may want to manually deal with
-   * wiring dependencies.  If you do, override this method
-   * and return true
+   * By default, Lift deals with managing wiring dependencies.  This means on
+   * each full render (a full render will happen on `[[reRender]]` or on a page
+   * load if there have been partial updates.), you may want to manually deal
+   * with wiring dependencies.  If you do, override this method and return true.
    */
   protected def manualWiringDependencyManagement = false
 
-  private def performReRender(sendAll: Boolean): RenderOut = {
-    if (! partialUpdateStream_?) {
-      _lastRenderTime = Helpers.nextNum
-    }
-
-    if (sendAll) {
-      cachedFixedRender.reset
-    }
-
-    if (sendAll || !cacheFixedRender) {
-      clearWiringDependencies()
-    }
-
-    wasLastFullRender = sendAll & hasOuter
-    if (! partialUpdateStream_?) {
-      deltas = Nil
-    }
-    receivedDelta = false
-
-    if (!dontCacheRendering) {
-      lastRendering = render
-    }
-
-    theSession.updateFunctionMap(S.functionMap, uniqueId, lastRenderTime)
-
-    val out = lastRendering
-
-    val rendered: AnswerRender =
-      AnswerRender(new XmlOrJsCmd(spanId, out, buildSpan _, notices.toList),
-        this, lastRenderTime, sendAll)
-
-    clearNotices
-    listeners.foreach(_._2(rendered))
-    listeners = Nil
-
-    out
-  }
-
-  def unWatch = partialUpdate(Call("lift.unlistWatch", uniqueId))
+  def unWatch = pushMessage(Call("lift.unlistWatch", uniqueId))
 
   /**
    * Poke the CometActor and cause it to do a partial update Noop which
@@ -896,7 +768,7 @@ trait BaseCometActor extends LiftActor with LiftCometActor with CssBindImplicits
    */
   override def poke(): Unit = {
     if (running) {
-      partialUpdate(Noop)
+      pushMessage(Noop)
     }
   }
 
@@ -906,7 +778,7 @@ trait BaseCometActor extends LiftActor with LiftCometActor with CssBindImplicits
    * all of the currently listening browser tabs.  This is the
    * preferred method over reRender to update the component
    */
-  protected def partialUpdate(cmd: => JsCmd) {
+  protected def pushMessage(cmd: =>JsCmd) {
     this ! PartialUpdateMsg(() => cmd)
   }
 
@@ -914,21 +786,21 @@ trait BaseCometActor extends LiftActor with LiftCometActor with CssBindImplicits
   }
 
   /**
-   * This method will be called after the Actor has started.  Do any setup here.
-   * DO NOT do initialization in the constructor or in initCometActor... do it here.
+   * This method will be called after the actor has started and been
+   * initialized. Do any actor setup here.  DO NOT do initialization in the
+   * constructor or in `[[initCometActor]]`... Do it here.
    */
   protected def localSetup(): Unit = {
   }
 
   /**
-   * Comet Actors live outside the HTTP request/response cycle.
-   * However, it may be useful to know what Request led to the
-   * creation of the CometActor.  You can override this method
-   * and capture the initial Req object.  Note that keeping a reference
-   * to the Req may lead to memory retention issues if the Req contains
-   * large message bodies, etc.  It's optimal to capture the path
-   * or capture any request parameters that you care about rather
-   * the keeping the whole Req reference.
+   * Comet actors live outside the HTTP request/response cycle. However, it may
+   * be useful to know what `[[Req]]` led to the creation of the comet.  You can
+   * override this method and capture the initial `Req` object.  Note that
+   * keeping a reference to the `Req` may lead to memory retention issues if the
+   * `Req` contains large message bodies, etc.  It's optimal to capture the path
+   * or capture any request parameters that you care about rather the keeping
+   * the whole `Req` reference.
    */
   protected def captureInitialReq(initialReq: Box[Req]) {
   }
@@ -947,17 +819,19 @@ trait BaseCometActor extends LiftActor with LiftCometActor with CssBindImplicits
   }
 
   /**
-   * This method will be called as part of the shut-down of the actor.  Release any resources here.
+   * This method will be called as part of the shut-down of the actor.  Release
+   * any resources here.
    */
   protected def localShutdown(): Unit = {
   }
 
   /**
-   * Compose the Message Handler function. By default,
-   * composes highPriority orElse mediumPriority orElse internalHandler orElse
-   * lowPriority orElse internalHandler.  But you can change how
-   * the handler works if doing stuff in highPriority, mediumPriority and
-   * lowPriority is not enough.
+   * Compose the message handler function. By default, composes `highPriority
+   * orElse mediumPriority orElse internalHandler orElse lowPriority orElse
+   * internalHandler`.
+   *
+   * This hook lets you change how the handler works if doing stuff in
+   * `highPriority`, `mediumPriority` and `lowPriority` is not enough.
    */
   protected def composeFunction: PartialFunction[Any, Unit] = composeFunction_i
 
@@ -971,9 +845,10 @@ trait BaseCometActor extends LiftActor with LiftCometActor with CssBindImplicits
         _mediumPriority orElse lowPriority orElse _lowPriority
   }
 
+  // FIXME Should be in RenderingCometActor?
   /**
-   * Ask another CometActor a question.  That other CometActor will
-   * take over the screen real estate until the question is answered.
+   * Ask another `[[LiftCometActor]]` a question.  That other comet will take
+   * over the screen real estate until the question is answered.
    */
   protected def ask(who: LiftCometActor, what: Any)(answerWith: Any => Unit) {
     who.callInitCometActor(CometCreationInfo(who.uniqueId, name, defaultHtml, attributes, theSession))
@@ -985,67 +860,12 @@ trait BaseCometActor extends LiftActor with LiftCometActor with CssBindImplicits
     who ! AskQuestion(what, this, listeners)
   }
 
+  // FIXME Should be in RenderingCometActor?
   protected def answer(answer: Any) {
     whosAsking.foreach(_ !? AnswerQuestion(answer, listeners))
     whosAsking = Empty
     performReRender(false)
   }
-
-  /**
-   * Convert a NodeSeq => NodeSeq to a RenderOut.  The render method
-   * returns a RenderOut.  This method implicitly (in Scala) or explicitly
-   * (in Java) will convert a NodeSeq => NodeSeq to a RenderOut.  This
-   * is helpful if you use Lift's CSS Selector Transforms to define
-   * rendering.
-   */
-  protected implicit def nsToNsFuncToRenderOut(f: NodeSeq => NodeSeq) = {
-    val additionalJs =
-      if (autoIncludeJsonCode) {
-        Full(jsonToIncludeInCode)
-      } else {
-        Empty
-      }
-
-    new RenderOut((Box !! defaultHtml).map(f), internalFixedRender, additionalJs, Empty, false)
-  }
-
-  /**
-   * Convert a Seq[Node] (the superclass of NodeSeq) to a RenderOut.
-   * The render method
-   * returns a RenderOut.  This method implicitly (in Scala) or explicitly
-   * (in Java) will convert a NodeSeq to a RenderOut.  This
-   * is helpful if you return a NodeSeq from your render method.
-   */
-  protected implicit def arrayToRenderOut(in: Seq[Node]): RenderOut = {
-    val additionalJs =
-      if (autoIncludeJsonCode) {
-        Full(jsonToIncludeInCode)
-      } else {
-        Empty
-      }
-
-      new RenderOut(Full(in: NodeSeq), internalFixedRender, additionalJs, Empty, false)
-  }
-
-  protected implicit def jsToXmlOrJsCmd(in: JsCmd): RenderOut = {
-    val additionalJs =
-      if (autoIncludeJsonCode) {
-        Full(in & jsonToIncludeInCode)
-      } else {
-        Full(in)
-      }
-
-    new RenderOut(Empty, internalFixedRender, additionalJs, Empty, false)
-  }
-
-  implicit def pairToPair(in: (String, Any)): (String, NodeSeq) = (in._1, Text(in._2 match {
-    case null => "null"
-    case s => s.toString
-  }))
-
-  implicit def nodeSeqToFull(in: NodeSeq): Box[NodeSeq] = Full(in)
-
-  implicit def elemToFull(in: Elem): Box[NodeSeq] = Full(in)
 
   /**
    * Similar with S.error
@@ -1134,19 +954,330 @@ trait BaseCometActor extends LiftActor with LiftCometActor with CssBindImplicits
   private def clearNotices {
     notices.clear
   }
-
 }
 
-trait CometActor extends BaseCometActor {
-  override final private[http] def partialUpdateStream_? = false
+@deprecated("Use RenderingCometActor instead.", "3.0.0")
+trait CometActor extends RenderingCometActor
 
+// Temporary placeholder until we can split out `BaseCometActor` stuff properly.
+trait RenderingCometActor extends MessagingCometActor {
   // Temporary placeholder until we can split out `BaseCometActor` stuff
   // properly.
   def cometRenderTimeout: Long = LiftRules.cometRenderTimeout
-}
 
-// Temporary placeholder until we can split out `BaseCometActor` stuff properly.
-trait RenderingCometActor extends CometActor
+  private val logger = Logger(classOf[RenderingCometActor])
+
+  private var spanId = uniqueId
+
+  @volatile private var _lastRenderTime = Helpers.nextNum
+
+  /**
+   * Get the current render clock for the CometActor
+   * @return
+   */
+  def renderClock: Long = lastRenderTime
+
+  def lastRenderTime: Long =  _lastRenderTime
+
+  private[this] var lastCachedRendering: RenderOut = _
+
+  // Access the last rendering; if `dontCacheRendering` is set, renders
+  // the comet; otherwise, provides the previously cached rendering.
+  private def lastRendering: RenderOut =
+    if (dontCacheRendering) {
+      val ret = render
+      theSession.updateFunctionMap(S.functionMap, uniqueId, lastRenderTime)
+      ret
+    } else {
+      lastCachedRendering
+    }
+
+  /**
+   * set the last rendering... ignore if we're not caching
+   */
+  private def lastRendering_=(last: RenderOut) {
+    if (!dontCacheRendering) {
+      lastCachedRendering = last
+    }
+  }
+
+  private var receivedDelta = false
+  private var wasLastFullRender = false
+
+  /**
+   * Set to `true` if we should run `[[render]]` on every page load.
+   * Defaults to `false`.
+   */
+  protected def alwaysReRenderOnPageLoad = false
+
+  /**
+   * Indicates whether, when rendered, this comet's contents should be
+   * surrounded by a generated container.
+   *
+   * @see parentTag
+   */
+  def hasOuter = true
+
+  /**
+   * The template `Elem` for the container this `RenderingCometActor`'s
+   * rendered contents will be wrapped in if `hasOuter` is `true`.
+   */
+  def parentTag = <div style="display: inline"/>
+
+  // FIXME Deprecate and rename to `buildContainer`.
+  /**
+   * Creates the container element acting as the real estate for comet
+   * rendering.
+   */
+  def buildSpan(xml: NodeSeq): Elem = {
+    parentTag.copy(child = xml) % ("id" -> spanId)
+  }
+
+  override protected def initCometActor(creationInfo: CometCreationInfo) {
+    if (! dontCacheRendering) {
+      lastCachedRendering = RenderOut(Full(defaultHtml), Empty, Empty, Empty, false)
+    }
+
+    super.initCometActor(creationInfo)
+  }
+
+  /**
+   * A part of the comet's screen real estate that is not updated by
+   * default with `[[reRender]]`.
+   *
+   * This block of HTML is useful, for example, the editor part of a
+   * comet-based control where the data is JSON and updated with
+   * `partialUpdate`s.
+   */
+  def fixedRender: Box[NodeSeq] = Empty
+
+  /**
+   * Calculate `fixedRender` and capture the postpage javascript.
+   */
+  protected def calcFixedRender: Box[NodeSeq] = {
+    fixedRender.map { fixedContent =>
+      theSession.postPageJavaScript() match {
+        case Nil =>
+          fixedContent
+        case postPageCommands => {
+          fixedContent ++ Script(postPageCommands)
+        }
+      }
+    }
+  }
+
+  // We have to cache fixedRender and only change it if the template
+  // changes or we get a reRender(true).
+  private def internalFixedRender: Box[NodeSeq] = {
+    if (! cacheFixedRender) {
+      calcFixedRender
+    } else {
+      cachedFixedRender.get
+    }
+  }
+
+  private val cachedFixedRender: FatLazy[Box[NodeSeq]] = FatLazy(calcFixedRender)
+
+  /**
+   * By default, we do not cache the value of `fixedRender`.  If it's
+   * expensive to recompute it each time there's a conversion of
+   * something to a `[[RenderOut]]`, override this method to enable
+   * caching.
+   */
+  protected def cacheFixedRender = false
+
+  /**
+   * Set this method to true if you want to avoid caching the
+   * rendering.  This trades space for time.
+   */
+  protected def dontCacheRendering: Boolean = false
+
+  /**
+   * This is the main method to override to define what is rendered by this
+   * comet into its container.
+   *
+   * There are implicit conversions for a bunch of stuff to `[[RenderOut]]`
+   * (including `NodeSeq`).  Thus, if you don't declare the return type to be
+   * something other than `RenderOut` and return something that's coercible into
+   * `RenderOut`, the compiler "does the right thing"(tm) for you.
+   *
+   * There's an implicit conversion for `(NodeSeq)=>NodeSeq`, so you can
+   * return a function (e.g., a `[[CssBindFunc]]`) that will convert the
+   * `[[defaultHtml]]` to the correct output.  There's an implicit conversion
+   * from `[[JsCmd]]`, so you can return some JavaScript to be sent to the
+   * browser. Lastly, there is an implicit conversions for `NodeSeq`, so you can
+   * also return XML directly here.
+   *
+   * Note that this method will be called each time a new browser tab is opened
+   * to the comet component or the comet component is otherwise accessed
+   * during a full page load (this is true even if a `[[partialUpdate]]` has
+   * occurred). It is meant to set the content of the component to the current
+   * state of whatever it is representing.
+   *
+   * When `render` is called, any pending `partialUpdate`s are cleared, so they
+   * should be true partial updates---calling `render` at a point in time Y
+   * should produce the same thing as calling `render` at a previous point in
+   * time X + processing any partial updates between times X and Y. For a more
+   * formal state and partial update representation, see `[[StatefulComet]]`.
+   *
+   * You may also want to look at the `[[fixedRender]]` method which is only
+   * called once and sets up a stable rendering state.
+   */
+  def render: RenderOut
+
+  /**
+   * Causes the entire component to be re-rendered (by calling `[[render]]`) and
+   * the latest rendering pushed out to any listeners to replace their current
+   * contents.  This method will cause the entire component to be rendered which
+   * can result in a huge blob of JavaScript to be sent to the client.  It's a
+   * much better practice to use partialUpdate for non-trivial comet
+   * components.
+   *
+   * @param sendAll If `true`, the fixed part of the comet will also be
+   *        re-rendered.
+   */
+  def reRender(sendAll: Boolean) {
+    this ! ReRender(sendAll)
+  }
+
+  /**
+   * Synonym for `reRender(false)`, which re-renders everything except the fixed
+   * part of the comet's contents.
+   */
+  def reRender() {
+    reRender(false)
+  }
+
+  private def performReRender(sendAll: Boolean): RenderOut = {
+    if (! partialUpdateStream_?) {
+      _lastRenderTime = Helpers.nextNum
+    }
+
+    if (sendAll) {
+      cachedFixedRender.reset
+    }
+
+    if (sendAll || !cacheFixedRender) {
+      clearWiringDependencies()
+    }
+
+    wasLastFullRender = sendAll & hasOuter
+    if (! partialUpdateStream_?) {
+      deltas = Nil
+    }
+    receivedDelta = false
+
+    if (!dontCacheRendering) {
+      lastRendering = render
+    }
+
+    theSession.updateFunctionMap(S.functionMap, uniqueId, lastRenderTime)
+
+    val out = lastRendering
+
+    val rendered: AnswerRender =
+      AnswerRender(new XmlOrJsCmd(spanId, out, buildSpan _, notices.toList),
+        this, lastRenderTime, sendAll)
+
+    clearNotices
+    listeners.foreach(_._2(rendered))
+    listeners = Nil
+
+    out
+  }
+
+  /**
+   * Perform a partial update of the comet component based on the `JsCmd`.  This
+   * means that the `JsCmd` will be sent to all of the currently listening
+   * browser tabs, and should represent a change in the state that was rendered
+   by `render` to some new state.
+   *
+   * Rerunning `render` after a partial update has been sent should produce the
+   * same content that the client will have after applying the given `cmd`. This
+   * is the preferred method over `reRender` to update the component, as it is
+   * more efficient.
+   *
+   * For a more formal state and partial update representation, see
+   * `[[StatefulComet]]`.
+   */
+  protected def partialUpdate(cmd: =>JsCmd): Unit = {
+    pushMessage(cmd)
+  }
+
+  /**
+   * A helpful implicit conversion that takes a `(NodeSeq)=>NodeSeq`
+   * (for example a `[[CssSel]]`) and converts it to a `Box[NodeSeq]` by
+   * applying the function to `[[defaultHtml]]`.
+   */
+  protected implicit def nodeSeqFuncToBoxNodeSeq(f: (NodeSeq)=>NodeSeq): Box[NodeSeq] = {
+    Full(f(defaultHtml))
+  }
+
+  /**
+   * Convert a `(NodeSeq)=>NodeSeq` to a `[[RenderOut]]`.
+   *
+   * The `[[render]]` method returns a `RenderOut`.  This method implicitly (in
+   * Scala) or explicitly (in Java) will convert a `(NodeSeq)=>NodeSeq` to a
+   * RenderOut, which is helpful if you use Lift's CSS Selector Transforms to
+   * define rendering.
+   */
+  protected implicit def nsToNsFuncToRenderOut(f: NodeSeq => NodeSeq) = {
+    val additionalJs =
+      if (autoIncludeJsonCode) {
+        Full(jsonToIncludeInCode)
+      } else {
+        Empty
+      }
+
+    new RenderOut((Box !! defaultHtml).map(f), internalFixedRender, additionalJs, Empty, false)
+  }
+
+  /**
+   * Convert a `Seq[Node]` (the superclass of `NodeSeq`) to a `[[RenderOut]]`.
+   *
+   * The `render` method returns a `RenderOut`.  This method implicitly (in
+   * Scala) or explicitly (in Java) will convert a `NodeSeq` to a `RenderOut`,
+   * which is helpful if you produce a `NodeSeq` in your render method.
+   */
+  protected implicit def arrayToRenderOut(in: Seq[Node]): RenderOut = {
+    val additionalJs =
+      if (autoIncludeJsonCode) {
+        Full(jsonToIncludeInCode)
+      } else {
+        Empty
+      }
+
+      new RenderOut(Full(in: NodeSeq), internalFixedRender, additionalJs, Empty, false)
+  }
+
+  /**
+   * Convert a `JsCmd` to a `[[RenderOut]]`.
+   *
+   * The `render` method returns a `RenderOut`.  This method implicitly (in
+   * Scala) or explicitly (in Java) will convert a `JsCmd` to a `RenderOut`,
+   * which is helpful if you produce JavaScript in the form of a `JsCmd` in your
+   * render method.
+   */
+  protected implicit def jsToXmlOrJsCmd(in: JsCmd): RenderOut = {
+    val additionalJs =
+      if (autoIncludeJsonCode) {
+        Full(in & jsonToIncludeInCode)
+      } else {
+        Full(in)
+      }
+
+    new RenderOut(Empty, internalFixedRender, additionalJs, Empty, false)
+  }
+
+  implicit def pairToPair(in: (String, Any)): (String, NodeSeq) = (in._1, Text(in._2 match {
+    case null => "null"
+    case s => s.toString
+  }))
+
+  implicit def nodeSeqToFull(in: NodeSeq): Box[NodeSeq] = Full(in)
+
+  implicit def elemToFull(in: Elem): Box[NodeSeq] = Full(in)
+}
 
 trait MessagingCometActor extends BaseCometActor {
   override final private[http] def partialUpdateStream_? = true
@@ -1157,7 +1288,7 @@ trait MessagingCometActor extends BaseCometActor {
   // properly.
   def cometRenderTimeout: Long = LiftRules.cometRenderTimeout
 
-  protected def pushMessage(cmd: => JsCmd) {
+  protected def pushMessage(cmd: =>JsCmd) {
     partialUpdate(cmd)
   }
 }
