@@ -8,4 +8,6 @@ jdk:
   - oraclejdk7
   - openjdk7
 
-script: ./liftsh test
+script: ./liftsh coverage test coverageReport coverageAggregate codacyCoverage
+
+secure: "HQPMo5hdvO/kzohuVUOTD6K/WfHrf52TqmzwwPMe4OgS3OXpWPaW59wKPEUIYjfa7litEkBSQVnswnDxZAdwcslQ9IA8sgfzOV+ygp3UY74zqxOCo7OM1Nn8WA16ZtTr/eVFbbevZ8wnApeag0o+z48D+yHnR0YqaEWuMW4DVvE="
