@@ -1,5 +1,3 @@
-"use strict";
-
 describe("Lift vanilla", function() {
 
   beforeEach(function() {

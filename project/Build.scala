@@ -19,6 +19,15 @@ import Keys._
 import net.liftweb.sbt.LiftBuildPlugin._
 import Dependencies._
 
+import com.typesafe.sbt.web.SbtWeb
+import com.typesafe.sbt.web.SbtWeb.autoImport._
+import com.typesafe.sbt.web.Import.WebKeys._
+import com.typesafe.sbt.jshint.SbtJSHint.autoImport._
+import com.typesafe.sbt.uglify.SbtUglify.autoImport._
+import com.typesafe.sbt.jse.SbtJsEngine.autoImport._
+
+import com.joescii.SbtJasminePlugin._
+
 /**
  * Pattern-matches an attributed file, extracting its module organization,
  * name, and revision if available in its attributes.
@@ -32,6 +41,8 @@ object MatchingModule {
 }
 
 object BuildDef extends Build {
+
+  val jsHintTriggeredTask = taskKey[Seq[File]]("Trigger jshint on compile")
 
   /**
    * A helper that returns the revision and JAR file for a given dependency.
@@ -73,7 +84,7 @@ object BuildDef extends Build {
         .dependsOn(common)
         .settings(description := "Simple Actor",
                   parallelExecution in Test := false)
-                  
+
   lazy val markdown =
     coreProject("markdown")
         .settings(description := "Markdown Parser",
@@ -126,8 +137,9 @@ object BuildDef extends Build {
   lazy val webkit =
     webProject("webkit")
         .dependsOn(util, testkit % "provided")
-        .settings(libraryDependencies += mockito_all)
-        .settings(yuiCompressor.Plugin.yuiSettings: _*)
+        .settings(libraryDependencies ++= Seq(mockito_all, jquery))
+        // .settings(yuiCompressor.Plugin.yuiSettings: _*)
+        .settings(jasmineSettings: _*)
         .settings(description := "Webkit Library",
                   parallelExecution in Test := false,
                   libraryDependencies <++= scalaVersion { sv =>
@@ -136,7 +148,18 @@ object BuildDef extends Build {
                   },
                   initialize in Test <<= (sourceDirectory in Test) { src =>
                     System.setProperty("net.liftweb.webapptest.src.test.webapp", (src / "webapp").absString)
-                  })
+                  },
+                  appJsDir := Seq(sourceDirectory.value / "main" / "assets" / "js"),
+                  appJsLibDir := Seq(sourceDirectory.value / "main" / "public"),
+                  jasmineTestDir += sourceDirectory.value / "test" / "assets" / "js",
+                  //JsEngineKeys.engineType := JsEngineKeys.EngineType.Node, // Trireme conflicts with yui-compressor
+                  // jsHintTriggeredTask <<= Def.task {
+                  //   JshintKeys.jshint.value
+                  // }.triggeredBy(compile in Compile),
+                  // (managedClasspath in Runtime) += (packageBin in Assets).value,
+
+                  pipelineStages := Seq(uglify))
+        .enablePlugins(SbtWeb)
 
 
 

@@ -1,0 +1,25 @@
+{
+  "name": "lift",
+  "version": "3.0.0",
+  "description": "A JavaScript library for use with the Lift web framework",
+  "scripts": {
+    "test": "karma start karma.conf.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/lift/framework.git"
+  },
+  "keywords": [
+    "lift"
+  ],
+  "author": "",
+  "license": "Apache-2.0",
+  "bugs": {
+    "url": "https://github.com/lift/framework/issues"
+  },
+  "homepage": "https://liftweb.net",
+  "devDependencies": {
+    "chai": "^3.4.1",
+    "sinon": "^1.17.2"
+  }
+}
