@@ -20,6 +20,7 @@
   "homepage": "https://liftweb.net",
   "devDependencies": {
     "chai": "^3.4.1",
-    "sinon": "^1.17.2"
+    "jquery": "^1.11.3",
+    "jsdom": "3.1.2"
   }
 }

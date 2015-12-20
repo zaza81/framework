@@ -8,8 +8,6 @@ resolvers += Resolver.typesafeRepo("releases")
 
 addSbtPlugin("com.typesafe.sbt" % "sbt-jshint" % "1.0.3")
 
-//addSbtPlugin("com.typesafe.sbt" % "sbt-mocha" % "1.1.0")
+addSbtPlugin("com.typesafe.sbt" % "sbt-mocha" % "1.1.0")
 
 addSbtPlugin("com.typesafe.sbt" % "sbt-uglify" % "1.0.3")
-
-addSbtPlugin("com.joescii" % "sbt-jasmine-plugin" % "1.4.1")

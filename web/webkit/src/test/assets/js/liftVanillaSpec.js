@@ -1,33 +1,39 @@
-var assert = require("assert");
+var expect = require('chai').expect;
 
 describe("liftVanilla", function() {
-  var xhr, requests;
-  var sinon = require("mocha-sinon");
+  var liftVanilla = require("./liftVanilla");
 
-  before(function () {
-    xhr = sinon.useFakeXMLHttpRequest();
-    requests = [];
-    xhr.onCreate = function (req) { requests.push(req); };
+  it("init is a function", function() {
+    expect(typeof liftVanilla.init).to.equal("function");
   });
 
-  after(function () {
-    // Like before we must clean up when tampering with globals.
-    xhr.restore();
-  });
+  // var xhr, requests;
+  // var sinon = require("sinon");
 
-  it("makes a GET request for todo items", function () {
-    getTodos(42, sinon.spy());
+  // before(function () {
+  //   xhr = sinon.useFakeXMLHttpRequest();
+  //   requests = [];
+  //   xhr.onCreate = function (req) { requests.push(req); };
+  // });
 
-    assert.equals(requests.length, 1);
-    assert.match(requests[0].url, "/todo/42/items");
-  });
+  // after(function () {
+  //   // Like before we must clean up when tampering with globals.
+  //   xhr.restore();
+  // });
 
-  it("load it", function() {
-    // var lift = require("lift");
-    var lv = require("./liftVanilla");
-    assert.equal(typeof lv.init, "function");
-    assert.equal(typeof lv.defaultSettings.ajaxGet, "function");
-    var jq = require("../lib/jquery/dist/jquery");
-  });
+  // it("makes a GET request for todo items", function () {
+  //   getTodos(42, sinon.spy());
+
+  //   assert.equals(requests.length, 1);
+  //   assert.match(requests[0].url, "/todo/42/items");
+  // });
+
+  // it("load it", function() {
+  //   // var lift = require("lift");
+  //   var lv = require("./liftVanilla");
+  //   assert.equal(typeof lv.init, "function");
+  //   assert.equal(typeof lv.defaultSettings.ajaxGet, "function");
+  //   var jq = require("../lib/jquery/dist/jquery");
+  // });
 });
 

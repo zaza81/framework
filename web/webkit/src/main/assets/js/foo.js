@@ -10,6 +10,11 @@
     root.foo = factory();
   }
 }(this, function() {
+  var x = 2;
+  if (x === 1) {
+    console.log(x);
+  }
+
   var foo = {
     hello: function(msg) {
       return "hello " + msg;

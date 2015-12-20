@@ -1,7 +1,8 @@
-var assert = require("assert");
+var expect = require('chai').expect;
+
 describe("foo", function() {
   it("say hello", function() {
     var foo = require("./foo");
-    assert.equal(foo.hello("world"), "hello world");
+    expect(foo.hello("world")).to.equal("hello world");
   });
 });

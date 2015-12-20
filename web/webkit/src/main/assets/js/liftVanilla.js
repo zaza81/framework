@@ -21,7 +21,7 @@
           pre = doc.addEventListener ? '' : 'on';
 
       var element = elementOrId;
-      if (typeof elementOrId == 'string') {
+      if (typeof elementOrId === 'string') {
         element = document.getElementById(elementOrId);
       }
 
@@ -34,9 +34,13 @@
       rem = doc.addEventListener ? 'removeEventListener' : 'detachEvent',
 
       init = function(e) {
-        if (e.type == 'readystatechange' && doc.readyState != 'complete') return;
-        (e.type == 'load' ? win : doc)[rem](pre + e.type, init, false);
-        if (!done && (done = true)) fn.call(win, e.type || e);
+        if (e.type === 'readystatechange' && doc.readyState !== 'complete') {
+          return;
+        }
+        (e.type === 'load' ? win : doc)[rem](pre + e.type, init, false);
+        if (!done && (done = true)) {
+          fn.call(win, e.type || e);
+        }
       },
 
       poll = function() {
@@ -44,16 +48,16 @@
         init('poll');
       };
 
-      if (doc.readyState == 'complete') {
+      if (doc.readyState === 'complete') {
         fn.call(win, 'lazy');
       } else {
         if (doc.createEventObject && root.doScroll) {
             try { top = !win.frameElement; } catch(e) { }
-            if (top) poll();
+            if (top) { poll(); }
         }
-        liftVanilla.onEvent(doc, 'DOMContentLoaded', init);
-        liftVanilla.onEvent(doc, 'readystatechange', init);
-        liftVanilla.onEvent(win, 'load', init);
+        defaultSettings.onEvent(doc, 'DOMContentLoaded', init);
+        defaultSettings.onEvent(doc, 'readystatechange', init);
+        defaultSettings.onEvent(win, 'load', init);
       }
     },
     ajaxPost: function(url, data, dataType, onSuccess, onFailure, onUploadProgress) {

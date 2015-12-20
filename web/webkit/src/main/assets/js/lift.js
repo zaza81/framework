@@ -15,7 +15,8 @@
   var hasOwnProperty = Object.prototype.hasOwnProperty;
 
   // "private" vars
-  var ajaxPath = function() { return settings.liftPath + '/ajax'; },
+  var settings,
+      ajaxPath = function() { return settings.liftPath + '/ajax'; },
       ajaxQueue = [],
       ajaxInProcess = null,
       ajaxVersion = 0,
@@ -30,7 +31,7 @@
       knownPromises = {};
 
   // default settings
-  var settings = {
+  settings = {
     /**
       * Contains the Ajax URI path used by Lift to process Ajax requests.
       */
@@ -77,10 +78,12 @@
     ajaxGet: function() {
       consoleOrAlert("ajaxGet function must be defined in settings");
     },
-    onEvent: function(elementOrId, eventName, fn) {
+    onEvent: function() {
+      // arguments: elementOrId, eventName, fn
       consoleOrAlert("onEvent function must be defined in settings");
     },
-    onDocumentReady: function(fn) {
+    onDocumentReady: function() {
+      // arguments: fn
       consoleOrAlert("onDocumentReady function must be defined in settings");
     },
     cometGetTimeout: 140000,
@@ -358,8 +361,9 @@
   // Forcibly restart the comet cycle; use this, for example, when a
   // new comet has been received.
   function restartComet() {
-    if (currentCometRequest)
+    if (currentCometRequest) {
       currentCometRequest.abort();
+    }
 
     cometSuccessFunc();
   }
@@ -437,7 +441,7 @@
 
     // "private" funcs
     function successMsg(value) {
-      if (_done || _failed) return;
+      if (_done || _failed) { return; }
       _values.push(value);
       for (var f in _valueFuncs) {
         _valueFuncs[f](value);
@@ -445,7 +449,7 @@
     }
 
     function failMsg(msg) {
-      if (_done || _failed) return;
+      if (_done || _failed) { return; }
       removePromise(self.guid);
       _failed = true;
       _failMsg = msg;
@@ -456,7 +460,7 @@
     }
 
     function doneMsg() {
-      if (_done || _failed) return;
+      if (_done || _failed) { return; }
       removePromise(self.guid);
       _done = true;
 
@@ -469,7 +473,7 @@
     self.guid = makeGuid();
 
     self.processMsg = function(evt) {
-      if (_done || _failed) return;
+      if (_done || _failed) { return; }
       _events.push(evt);
       for (var v in _eventFuncs) {
         try { _eventFuncs[v](evt); }
@@ -543,15 +547,15 @@
     self.map = function(f) {
       var ret = new Promise();
 
-      done(function() {
+      self.done(function() {
         ret.doneMsg();
       });
 
-      fail(function (m) {
+      self.fail(function (m) {
         ret.failMsg(m);
       });
 
-      then(function (v) {
+      self.then(function (v) {
         ret.successMsg(f(v));
       });
 
@@ -573,7 +577,7 @@
             cometGuid, cometVersion,
             comets = {};
         for (var i = 0; i < attributes.length; ++i) {
-          if (attributes[i].name == 'data-lift-gc') {
+          if (attributes[i].name === 'data-lift-gc') {
             pageId = attributes[i].value;
             if (settings.enableGc) {
               lift.startGc();
@@ -583,12 +587,12 @@
             cometVersion = parseInt(attributes[i].value);
 
             comets[cometGuid] = cometVersion;
-          } else if (attributes[i].name == 'data-lift-session-id') {
+          } else if (attributes[i].name === 'data-lift-session-id') {
             sessionId = attributes[i].value;
           }
         }
 
-        if (typeof cometGuid != 'undefined') {
+        if (typeof cometGuid !== 'undefined') {
           registerComets(comets, true);
         }
 

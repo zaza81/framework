@@ -84,9 +84,4 @@ object Dependencies {
   lazy val scalatest   = "org.scalatest"              %% "scalatest"                % "2.1.3"   % "test"
   lazy val junit       = "junit"                       % "junit"                    % "4.8.2"   % "test"
 
-  lazy val jquery          = "org.webjars.bower" % "jquery"          % "1.11.3"     % "test"
-  // lazy val sinon           = "org.webjars.bower" % "sinon"           % "1.17.2"     % "test"
-  // lazy val chai            = "org.webjars.bower" % "chai"            % "3.4.2"      % "test"
-  // lazy val jasmineCore     = "org.webjars.bower" % "jasmine-core"    % "2.4.1"      % "provided"
-  // lazy val jasmineAjax     = "org.webjars.bower" % "jasmine-ajax"    % "3.2.0"      % "provided"
 }
