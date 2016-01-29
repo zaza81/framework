@@ -10,4 +10,6 @@ addSbtPlugin("com.typesafe.sbt" % "sbt-web" % "1.2.3")
 
 addSbtPlugin("com.typesafe.sbt" % "sbt-jshint" % "1.0.3")
 
+libraryDependencies += "org.webjars" % "jshint-node" % "2.6.3-2"
+
 addSbtPlugin("com.typesafe.sbt" % "sbt-uglify" % "1.0.3")

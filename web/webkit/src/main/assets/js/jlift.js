@@ -12,6 +12,8 @@
  */
 
 ( function() {
+	"use strict";
+
 	/* jshint ignore:start */
 	window.lift$ = {
 		buildIndex : function(on, indexName) {

@@ -15,6 +15,8 @@
  * Lift helpers. The Ext-Core dependency is: ext-core.js
  */
 ( function() {
+	"use strict";
+
 	/* jshint ignore:start */
   Ext.namespace('Ext.lift');
 

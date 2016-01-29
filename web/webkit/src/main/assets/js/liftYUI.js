@@ -15,6 +15,8 @@
  * Lift helpers. The YUI dependencies are: yahoo.js, dom.js, connection.js, json.js
  */
 ( function() {
+	"use strict";
+	
 	/* jshint ignore:start */
 	YAHOO.namespace("lift");
 

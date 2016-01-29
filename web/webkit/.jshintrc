@@ -1,7 +1,7 @@
 {
   "curly": true,
   "eqeqeq": true,
-  "esversion": 3,
+  "es3": true,
   "futurehostile": true,
   "latedef": "nofunc",
   "noarg": true,
