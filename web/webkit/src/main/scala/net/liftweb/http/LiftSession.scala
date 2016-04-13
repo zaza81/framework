@@ -956,6 +956,8 @@ class LiftSession(private[http] val _contextPath: String, val underlyingId: Stri
 
             // Phase 2: Head & Tail merge, add additional elements to body & head
             val xml = merge(rawXml, request)
+            lastRender.set(Full(xml))
+            nextRender.set(Full(() => merge(processSurroundAndInclude(PageName.get, xhtml), request)))
 
             // snapshot for ajax calls
             nmessageCallback.put(S.renderVersion,
