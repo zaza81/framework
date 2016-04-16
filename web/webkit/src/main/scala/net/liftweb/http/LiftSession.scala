@@ -2795,7 +2795,7 @@ class LiftSession(private[http] val _contextPath: String, val underlyingId: Stri
   }
 
   def plumbUpdateDOM(): Unit = {
-    testStatefulFeature{
+    if(updateDomComet.get.isEmpty) testStatefulFeature {
       import JsCmds._
       implicit val formats = VDom.formats
       val currentReq: Box[Req] = S.request.map(_.snapshot)
