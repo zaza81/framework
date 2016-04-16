@@ -19,7 +19,9 @@ package object vdom {
     def fromXml(n:Node):VNode = {
       if(n.label == pcdata) text(n.text)
       else {
-        val attrs:Map[String, String] = n.attributes.collect { case UnprefixedAttribute(k, Text(v), _) => k -> v }.toMap
+        val attrs:Map[String, String] = n.attributes
+          .collect { case UnprefixedAttribute(k, Text(v), _) => k -> v }
+          .toMap
         val children:List[VNode] = n.nonEmptyChildren
           .filter(isntWhitespace)
           .map(fromXml)
@@ -37,9 +39,9 @@ package object vdom {
       val additions = bChildren.zipWithIndex.drop(aChildren.length)
         .map { case (n, i) => VNodeInsert(i, VNode.fromXml(n)) }
         .toList
-      val children = aChildren.zip(bChildren).collect {
-        case (ca, cb) if ca != cb => diff(ca, cb)
-      }.toList
+      val children = aChildren.zip(bChildren)
+        .collect { case (ca, cb) if ca != cb => diff(ca, cb) }  // This != check probably would benefit from memoizing
+        .toList
 
       VNodeTransformTree(additions, children)
     }
