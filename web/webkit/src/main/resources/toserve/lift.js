@@ -397,6 +397,38 @@
       }
     }
 
+    function updateNode(node, tree) {
+      console.log(node);
+      console.log(tree);
+
+      for(var i=0; i < tree.transforms.length; i++) {
+        var tf = tree.transforms[i];
+        switch (tf.type) {
+          case "insert": insertNode(node, tf.position, tf.node); break;
+        }
+      }
+      var j=0;
+      for(var i=0; i < tree.children.length; i++) {
+        while(node.childNodes[j].nodeName === "#text" && node.childNodes[j].data.trim() === "") j++;
+
+        updateNode(node.childNodes[j++], tree.children[i]);
+      }
+    }
+
+    function createElement(vnode) {
+      var e = vnode.tag === "#text" ? document.createTextNode(vnode.text) : document.createElement(vnode.tag);
+      for(var i = 0; i < vnode.children.length; i++) {
+        e.appendChild(createElement(vnode.children[i]));
+      }
+      return e;
+    }
+
+    function insertNode(parent, position, vnode) {
+      console.log("inserting...");
+      console.log(vnode);
+      // TODO: insertBefore() if not at the end
+      parent.appendChild(createElement(vnode));
+    }
 
     ////////////////////////////////////////////////
     ///// Promises /////////////////////////////////
@@ -641,6 +673,9 @@
         if (p) {
           p.processMsg(evt);
         }
+      },
+      updateBody: function(tree) {
+        updateNode(document.body, tree);
       }
     };
   })();

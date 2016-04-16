@@ -1,8 +1,9 @@
-package net.liftweb.util.vdom
+package net.liftweb.util
 
+import net.liftweb.util.VDom.VDomHelpers._
+import net.liftweb.util.VDom.{VNode, VNodeInsert}
+import VNode.{text => txt}
 import org.specs2.mutable.Specification
-import VDomHelpers._
-import VDomHelpers.{ text => txt }
 
 object VDomSpec extends Specification {
   "VDom Specification".title
@@ -12,6 +13,7 @@ object VDomSpec extends Specification {
       val html =
         <form method="post" data-lift="form.ajax">
           <span>Enter your stuff:</span>
+          <hr/>
           <div data-lift="Chat.submit">
             <input type="text" id="chat-in" name="in"/>
             <input type="submit" value="Submit"/>
@@ -20,6 +22,7 @@ object VDomSpec extends Specification {
 
       val vdom = VNode("form", Map("method" -> "post", "data-lift" -> "form.ajax"), List(
         VNode("span", Map(), List(VNode.text("Enter your stuff:"))),
+        VNode("hr", Map(), List()),
         VNode("div", Map("data-lift" -> "Chat.submit"), List(
           VNode("input", Map("type" -> "text", "id" -> "chat-in", "name" -> "in")),
           VNode("input", Map("type" -> "submit", "value" -> "Submit")
@@ -34,6 +37,7 @@ object VDomSpec extends Specification {
     "find an added <li>" in {
       val before =
         <p>
+          <hr/>
           <ul>
             <li>Message 1</li>
             <li>Message 2</li>
@@ -42,6 +46,7 @@ object VDomSpec extends Specification {
 
       val after =
         <p>
+          <hr/>
           <ul>
             <li>Message 1</li>
             <li>Message 2</li>
@@ -51,7 +56,11 @@ object VDomSpec extends Specification {
 
       val expected =
         node(
-          node().withTransforms(VNodeInsert(2, VNode("li", Map(), List(txt("Message 3")))))
+          node(),
+          node(
+            node(),
+            node()
+          ).withTransforms(VNodeInsert(2, VNode("li", Map(), List(txt("Message 3")))))
         )
 
       VDom.diff(before, after) must_== expected

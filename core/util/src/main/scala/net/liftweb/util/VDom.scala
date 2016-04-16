@@ -4,7 +4,7 @@ import net.liftweb.json._
 
 import scala.xml.{Text, UnprefixedAttribute, Node}
 
-package object vdom {
+object VDom {
   val pcdata = "#PCDATA"
   case class VNode(tag:String, attributes:Map[String, String] = Map(), children:List[VNode] = List(), text:Option[String] = None)
 
@@ -13,18 +13,42 @@ package object vdom {
 
   case class VNodeTransformTree(transforms:List[VNodeTransform], children:List[VNodeTransformTree])
 
-  val typeHints = ShortTypeHints(List(classOf[VNodeInsert]))
+  object typeHints extends TypeHints {
+    val classToHint:Map[Class[_], String] = Map(
+      classOf[VNodeInsert] -> "insert"
+    )
+    val hint2Class:Map[String, Class[_]] = classToHint.map { case (c, h) => h -> c }.toMap
+    override val hints: List[Class[_]] = classToHint.keysIterator.toList
+    override def hintFor(clazz: Class[_]):String = classToHint(clazz)
+    override def classFor(hint: String) = hint2Class.get(hint)
+  }
   val formats = new Formats {
     override val dateFormat: DateFormat = DefaultFormats.lossless.dateFormat
-    override val typeHints = vdom.typeHints
+    override val typeHints = VDom.typeHints
     override val typeHintFieldName = "type"
+  }
+
+  def diff(a:Node, b:Node):VNodeTransformTree = {
+    val aChildren = a.nonEmptyChildren.filter(isntWhitespace)
+    val bChildren = b.nonEmptyChildren.filter(isntWhitespace)
+
+    val additions = bChildren.zipWithIndex.drop(aChildren.length)
+      .map { case (n, i) => VNodeInsert(i, VNode.fromXml(n)) }
+      .toList
+    val children = aChildren.zip(bChildren)
+      .collect {
+        case (ca, cb) if ca != cb => diff(ca, cb)     // This != check probably would benefit from memoizing
+        case _ => VNodeTransformTree(List(), List())  // No changes for this node, make a placeholder
+      }.toList
+
+    VNodeTransformTree(additions, children)
   }
 
   private def isText(n:Node) = n.label == pcdata
   private def isntWhitespace(n:Node) = !isText(n) || !n.text.trim.isEmpty
 
   object VNode {
-    def text(t:String):VNode = VNode(pcdata, Map(), List(), Some(t))
+    def text(t:String):VNode = VNode("#text", Map(), List(), Some(t))
     def fromXml(n:Node):VNode = {
       if(n.label == pcdata) text(n.text)
       else {
@@ -38,21 +62,6 @@ package object vdom {
 
         VNode(n.label, attrs, children)
       }
-    }
-  }
-  object VDom {
-    def diff(a:Node, b:Node):VNodeTransformTree = {
-      val aChildren = a.nonEmptyChildren.filter(isntWhitespace)
-      val bChildren = b.nonEmptyChildren.filter(isntWhitespace)
-
-      val additions = bChildren.zipWithIndex.drop(aChildren.length)
-        .map { case (n, i) => VNodeInsert(i, VNode.fromXml(n)) }
-        .toList
-      val children = aChildren.zip(bChildren)
-        .collect { case (ca, cb) if ca != cb => diff(ca, cb) }  // This != check probably would benefit from memoizing
-        .toList
-
-      VNodeTransformTree(additions, children)
     }
   }
 
