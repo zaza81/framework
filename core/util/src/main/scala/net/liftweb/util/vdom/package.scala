@@ -1,5 +1,7 @@
 package net.liftweb.util
 
+import net.liftweb.json._
+
 import scala.xml.{Text, UnprefixedAttribute, Node}
 
 package object vdom {
@@ -10,6 +12,13 @@ package object vdom {
   case class VNodeInsert(position:Int, node:VNode) extends VNodeTransform
 
   case class VNodeTransformTree(transforms:List[VNodeTransform], children:List[VNodeTransformTree])
+
+  val typeHints = ShortTypeHints(List(classOf[VNodeInsert]))
+  val formats = new Formats {
+    override val dateFormat: DateFormat = DefaultFormats.lossless.dateFormat
+    override val typeHints = vdom.typeHints
+    override val typeHintFieldName = "type"
+  }
 
   private def isText(n:Node) = n.label == pcdata
   private def isntWhitespace(n:Node) = !isText(n) || !n.text.trim.isEmpty
