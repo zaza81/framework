@@ -2829,7 +2829,7 @@ class LiftSession(private[http] val _contextPath: String, val underlyingId: Stri
         override def parentTag = <div style="display: none"/>
 
         override def lowPriority: PartialFunction[Any, Unit] = {
-          case UpdateDOM => partialUpdate(updateDomCmd)
+          case UpdateDOM(andThen) => partialUpdate(updateDomCmd & andThen)
         }
       }
 
