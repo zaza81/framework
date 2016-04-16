@@ -2794,6 +2794,58 @@ class LiftSession(private[http] val _contextPath: String, val underlyingId: Stri
     }
   }
 
+  def plumbUpdateDOM(): Unit = {
+    testStatefulFeature{
+      import JsCmds._
+      implicit val formats = VDom.formats
+      val currentReq: Box[Req] = S.request.map(_.snapshot)
+      val renderVersion = RenderVersion.get
+
+      def updateDomCmd:JsCmd = RenderVersion.doWith(renderVersion){
+        val vDomUpdate:Box[JsCmd] = for {
+          s <- S.session
+          last <- lastRender.get
+          nextF <- nextRender.get
+          next = nextF()
+          lastBody <- (last \\ "body").headOption
+          nextBody <- (next \\ "body").headOption
+        } yield {
+          lastRender.set(Full(next))
+          val diffObj = VDom.diff(lastBody, nextBody)
+
+          JE.Call("lift.updateBody", Extraction.decompose(diffObj)):JsCmd
+        }
+
+        vDomUpdate.openOr(JsCmds.Noop)
+      }
+
+      val ca = new CometActor {
+        def render: RenderOut = NodeSeq.Empty
+
+        override def lifespan = Full(LiftRules.clientActorLifespan.vend.apply(this))
+
+        override def hasOuter = false
+
+        override def parentTag = <div style="display: none"/>
+
+        override def lowPriority: PartialFunction[Any, Unit] = {
+          case UpdateDOM => partialUpdate(updateDomCmd)
+        }
+      }
+
+      nasyncComponents.put(CometId(ca.theType openOr "UpdateDOM Comet Actor", ca.name), ca)
+      nasyncById.put(ca.uniqueId, ca)
+
+      ca.callInitCometActor(CometCreationInfo(Helpers.nextFuncName, Full(Helpers.nextFuncName), NodeSeq.Empty, Map.empty, this))
+
+      ca ! PerformSetupComet2(Empty)
+
+      S.addComet(ca)
+
+      updateDomComet.set(Full(ca))
+    }
+  }
+
   private case class ItemMsg(guid: String, item: JValue)
   private case class DoneMsg(guid: String)
   private case class FailMsg(guid: String, msg: String)
