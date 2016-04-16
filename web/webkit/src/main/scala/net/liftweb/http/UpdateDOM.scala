@@ -2,7 +2,6 @@ package net.liftweb.http
 
 import net.liftweb.common.{Full, Empty, Box}
 import net.liftweb.http.js.JsCmd
-import net.liftweb.http.js.JsCmds.Noop
 
 import scala.xml.Node
 
@@ -10,7 +9,7 @@ import scala.xml.Node
 private [http] object lastRender extends RequestVar[Box[Node]](Empty)
 private [http] object nextRender extends RequestVar[Box[() => Node]](Empty)
 
-case class UpdateDOM(thenDo:JsCmd = Noop) extends JsCmd {
+class UpdateDOM extends JsCmd {
   override def toJsCmd:String = {
     val vDomUpdate = for {
       s <- S.session
@@ -26,7 +25,7 @@ case class UpdateDOM(thenDo:JsCmd = Noop) extends JsCmd {
       "lift.logError('hello');"
     }
 
-    vDomUpdate.openOr("") + thenDo.toJsCmd
+    vDomUpdate.openOr("")
   }
 
 }
