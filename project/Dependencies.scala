@@ -83,6 +83,8 @@ object Dependencies {
   lazy val specs2      = "org.specs2"                 %% "specs2"                   % "3.7"  % "test"
   lazy val scalatest   = "org.scalatest"              %% "scalatest"                % "2.1.3"   % "test"
   lazy val junit       = "junit"                       % "junit"                    % "4.8.2"   % "test"
+  lazy val htmlunit    = "net.sourceforge.htmlunit"    % "htmlunit"                 % "2.19"    % "test"
+
 
   lazy val jquery          = "org.webjars.bower" % "jquery"          % "1.11.3" % "provided"
   lazy val jasmineCore     = "org.webjars.bower" % "jasmine-core"    % "2.4.1"  % "provided"

@@ -135,7 +135,7 @@ object BuildDef extends Build {
                   parallelExecution in Test := false,
                   libraryDependencies <++= scalaVersion { sv =>
                     Seq(commons_fileupload, rhino, servlet_api, specs2.copy(configurations = Some("provided")), jetty6,
-                      jwebunit)
+                      jwebunit, htmlunit)
                   },
                   initialize in Test <<= (sourceDirectory in Test) { src =>
                     System.setProperty("net.liftweb.webapptest.src.test.webapp", (src / "webapp").absString)
