@@ -15,4 +15,4 @@ object SendUpdateDOM {
     updateDomComet.get.foreach(_ ! UpdateDOM(andThen))
   }
 }
-case class UpdateDOM(andThen:JsCmd)
+case class UpdateDOM(andThen:JsCmd = Noop)

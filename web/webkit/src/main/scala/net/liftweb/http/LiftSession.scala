@@ -2794,7 +2794,7 @@ class LiftSession(private[http] val _contextPath: String, val underlyingId: Stri
     }
   }
 
-  def plumbUpdateDOM(): Unit = {
+  def plumbUpdateDOM(listenTo:List[LiftActor] = List()): Unit = {
     if(updateDomComet.get.isEmpty) testStatefulFeature {
       import JsCmds._
       implicit val formats = VDom.formats
@@ -2830,6 +2830,15 @@ class LiftSession(private[http] val _contextPath: String, val underlyingId: Stri
 
         override def lowPriority: PartialFunction[Any, Unit] = {
           case UpdateDOM(andThen) => partialUpdate(updateDomCmd & andThen)
+        }
+        override protected def localSetup() {
+          listenTo.foreach(_ ! AddAListener(this, { case _ => true }))
+          super.localSetup()
+        }
+
+        override protected def localShutdown() {
+          listenTo.foreach(_ ! RemoveAListener(this))
+          super.localShutdown()
         }
       }
 
