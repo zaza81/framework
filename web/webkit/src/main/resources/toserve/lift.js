@@ -398,9 +398,6 @@
     }
 
     function updateNode(node, tree) {
-      console.log(node);
-      console.log(tree);
-
       for(var i=0; i < tree.transforms.length; i++) {
         var tf = tree.transforms[i];
         switch (tf.type) {
@@ -424,8 +421,6 @@
     }
 
     function insertNode(parent, position, vnode) {
-      console.log("inserting...");
-      console.log(vnode);
       // TODO: insertBefore() if not at the end
       parent.appendChild(createElement(vnode));
     }
