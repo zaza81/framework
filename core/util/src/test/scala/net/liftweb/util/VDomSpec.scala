@@ -1,7 +1,7 @@
 package net.liftweb.util
 
 import net.liftweb.util.VDom.VDomHelpers._
-import net.liftweb.util.VDom.{VNode, VNodeInsert}
+import net.liftweb.util.VDom.{VNodeDelete, VNode, VNodeInsert}
 import VNode.{text => txt}
 import org.specs2.mutable.Specification
 
@@ -9,7 +9,7 @@ object VDomSpec extends Specification {
   "VDom Specification".title
 
   "VNode.fromXml" should {
-    "a VNode from a typical html sample" in {
+    "create a VNode from a typical html sample" in {
       val html =
         <form method="post" data-lift="form.ajax">
           <span>Enter your stuff:</span>
@@ -34,25 +34,25 @@ object VDomSpec extends Specification {
   }
 
   "VDom.diff" should {
-    "find an added <li>" in {
+    "find an added element" in {
       val before =
-        <p>
+        <div>
           <hr/>
           <ul>
             <li>Message 1</li>
             <li>Message 2</li>
           </ul>
-        </p>
+        </div>
 
       val after =
-        <p>
+        <div>
           <hr/>
           <ul>
             <li>Message 1</li>
             <li>Message 2</li>
             <li>Message 3</li>
           </ul>
-        </p>
+        </div>
 
       val expected =
         node(
@@ -65,5 +65,34 @@ object VDomSpec extends Specification {
 
       VDom.diff(before, after) must_== expected
     }
+
+    "find an removed element" in {
+      val before =
+        <div>
+          <hr/>
+          <ul>
+            <li>Message 1</li>
+            <li>Message 2</li>
+          </ul>
+        </div>
+
+      val after =
+        <div>
+          <hr/>
+          <ul>
+            <li>Message 2</li>
+          </ul>
+        </div>
+
+      val expected =
+        node(
+          node(),
+          node(
+            node()
+          ).withTransforms(VNodeDelete(0))
+        )
+
+      VDom.diff(before, after) must_== expected
+    }.pendingUntilFixed("Not doing removes yet")
   }
 }

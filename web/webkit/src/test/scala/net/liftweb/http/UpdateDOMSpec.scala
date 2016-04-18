@@ -35,6 +35,17 @@ object UpdateDOMSpec extends Specification with XmlMatchers {
         {body}
       </html>
 
+    def toXml(e:DomNode):Node = {
+      val attrs:MetaData = (0 until e.getAttributes.getLength).foldLeft(Null:MetaData) {
+        case (acc, i) =>
+          val attr = e.getAttributes.item(i)
+          new UnprefixedAttribute(attr.getNodeName, Text(attr.getNodeValue), acc)
+      }
+      val children = e.getChildren.asScala.map(toXml).toSeq
+      if(e.getNodeName == "#text") Text(e.getTextContent)
+      else Elem(null, e.getNodeName, attrs, TopScope, true, children:_*)
+    }
+
     val diff = VDom.diff(before, after)
     val js = JE.Call("lift.updateBody", Extraction.decompose(diff)).toJsCmd
 
@@ -44,6 +55,7 @@ object UpdateDOMSpec extends Specification with XmlMatchers {
       w.write("<!DOCTYPE html>")
       Html5.write(html(before), w, true, true)
       w.close()
+
       val client = new WebClient(CHROME)
       val options = client.getOptions()
       options.setHomePage(WebClient.URL_ABOUT_BLANK.toString())
@@ -52,17 +64,6 @@ object UpdateDOMSpec extends Specification with XmlMatchers {
       client.getPage(file.toURI.toURL)
       val window = client.getCurrentWindow().getTopWindow
       val page:HtmlPage = window.getEnclosedPage().asInstanceOf[HtmlPage] // asInstanceOf because ... java...
-
-      def toXml(e:DomNode):Node = {
-        val attrs:MetaData = (0 until e.getAttributes.getLength).foldLeft(Null:MetaData) {
-          case (acc, i) =>
-            val attr = e.getAttributes.item(i)
-            new UnprefixedAttribute(attr.getNodeName, Text(attr.getNodeValue), acc)
-        }
-        val children = e.getChildren.asScala.map(toXml).toSeq
-        if(e.getNodeName == "#text") Text(e.getTextContent)
-        else Elem(null, e.getNodeName, attrs, TopScope, true, children:_*)
-      }
 
       def exec(js:String):String = {
         val toRun = "function() {\n"+js+"\n};"
@@ -88,7 +89,7 @@ object UpdateDOMSpec extends Specification with XmlMatchers {
   }
 
   "UpdateDOM" should {
-    "append a <li>" in {
+    "append an element" in {
       val before =
         <body data-lift-content-id="main">
           <div>
@@ -115,7 +116,7 @@ object UpdateDOMSpec extends Specification with XmlMatchers {
       updateAndCompare(before, after)
     }
 
-    "append two <li>'s" in {
+    "append two elements" in {
       val before =
         <body data-lift-content-id="main">
           <div>
@@ -142,6 +143,31 @@ object UpdateDOMSpec extends Specification with XmlMatchers {
 
       updateAndCompare(before, after)
     }
+
+    "remove an element" in {
+      val before =
+        <body data-lift-content-id="main">
+          <div>
+            <hr/>
+            <ul>
+              <li>Message 1</li>
+              <li>Message 2</li>
+            </ul>
+          </div>
+        </body>
+
+      val after =
+        <body data-lift-content-id="main">
+          <div>
+            <hr/>
+            <ul>
+              <li>Message 2</li>
+            </ul>
+          </div>
+        </body>
+
+      updateAndCompare(before, after)
+    }.pendingUntilFixed("Not doing removes yet")
   }
 
 }

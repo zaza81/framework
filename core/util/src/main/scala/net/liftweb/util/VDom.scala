@@ -10,12 +10,14 @@ object VDom {
 
   trait VNodeTransform
   case class VNodeInsert(position:Int, node:VNode) extends VNodeTransform
+  case class VNodeDelete(position:Int) extends VNodeTransform
 
   case class VNodeTransformTree(transforms:List[VNodeTransform], children:List[VNodeTransformTree])
 
   object typeHints extends TypeHints {
     val classToHint:Map[Class[_], String] = Map(
-      classOf[VNodeInsert] -> "insert"
+      classOf[VNodeInsert] -> "insert",
+      classOf[VNodeDelete] -> "delete"
     )
     val hint2Class:Map[String, Class[_]] = classToHint.map { case (c, h) => h -> c }.toMap
     override val hints: List[Class[_]] = classToHint.keysIterator.toList
@@ -29,20 +31,26 @@ object VDom {
   }
 
   def diff(a:Node, b:Node):VNodeTransformTree = {
-    val aChildren = a.nonEmptyChildren.filter(isntWhitespace)
-    val bChildren = b.nonEmptyChildren.filter(isntWhitespace)
+    val aChildren = a.nonEmptyChildren.filter(isntWhitespace).toList
+    val bChildren = b.nonEmptyChildren.filter(isntWhitespace).toList
 
     val additions = bChildren.zipWithIndex.drop(aChildren.length)
       .map { case (n, i) => VNodeInsert(i, VNode.fromXml(n)) }
-      .toList
+//    val deletions = aChildren.diff(bChildren)
+//      .map(c => VNodeDelete(aChildren.indexOf(c)))
+
+    val transforms = additions //++ deletions
+
     val children = aChildren.zip(bChildren)
       .collect {
         case (ca, cb) if ca != cb => diff(ca, cb)     // This != check probably would benefit from memoizing
         case _ => VNodeTransformTree(List(), List())  // No changes for this node, make a placeholder
-      }.toList
+      }
 
-    VNodeTransformTree(additions, children)
+    VNodeTransformTree(transforms, children)
   }
+
+  def areSimilar(a:Node, b:Node):Boolean = false
 
   private def isText(n:Node) = n.label == pcdata
   private def isntWhitespace(n:Node) = !isText(n) || !n.text.trim.isEmpty
