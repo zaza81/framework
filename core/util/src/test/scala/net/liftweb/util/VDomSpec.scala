@@ -1,7 +1,7 @@
 package net.liftweb.util
 
 import net.liftweb.util.VDom.VDomHelpers._
-import net.liftweb.util.VDom.{VNodeDelete, VNode, VNodeInsert}
+import net.liftweb.util.VDom.{VNodeReorder, VNodeDelete, VNode, VNodeInsert}
 import VNode.{text => txt}
 import org.specs2.mutable.Specification
 
@@ -9,6 +9,8 @@ object VDomSpec extends Specification {
   "VDom Specification".title
 
   "VNode.fromXml" should {
+    import VNode.fromXml
+
     "create a VNode from a typical html sample" in {
       val html =
         <form method="post" data-lift="form.ajax">
@@ -29,11 +31,27 @@ object VDomSpec extends Specification {
         ))
       )))
 
-      VNode.fromXml(html) must_== vdom
+      fromXml(html) must_== vdom
+    }
+  }
+
+  "VDom.compare" should {
+    import VDom.compare
+
+    "regard elements with different tags as dissimilar" in {
+      compare(<div></div>, <span></span>) must_== 0f
+    }
+
+    "regard elements with the same tags and children as the same" in {
+      val a = <span>Some text</span>
+      val b = <span>Some text</span>  // Purposefully making a copy for the test
+      compare(a, b) must_== 1f
     }
   }
 
   "VDom.diff" should {
+    import VDom.diff
+
     "find an added element" in {
       val before =
         <div>
@@ -63,7 +81,7 @@ object VDomSpec extends Specification {
           ).withTransforms(VNodeInsert(2, VNode("li", Map(), List(txt("Message 3")))))
         )
 
-      VDom.diff(before, after) must_== expected
+      diff(before, after) must_== expected
     }
 
     "find an removed element" in {
@@ -92,7 +110,43 @@ object VDomSpec extends Specification {
           ).withTransforms(VNodeDelete(0))
         )
 
-      VDom.diff(before, after) must_== expected
+      diff(before, after) must_== expected
     }.pendingUntilFixed("Not doing removes yet")
+
+    "find reordered elements" in {
+      val before =
+        <div>
+          <hr/>
+          <ul>
+            <li>Message 1</li>
+            <li>Message 2</li>
+            <li>Message 3</li>
+            <li>Message 4</li>
+          </ul>
+        </div>
+
+      val after =
+        <div>
+          <hr/>
+          <ul>
+            <li>Message 2</li>
+            <li>Message 4</li>
+            <li>Message 3</li>
+            <li>Message 1</li>
+          </ul>
+        </div>
+
+      val expected =
+        node(
+          node(),
+          node(
+            node(),
+            node()
+          ).withTransforms(VNodeReorder(Map(0 -> 3, 1 -> 0, 3 -> 1)))
+        )
+
+      diff(before, after) must_== expected
+    }.pendingUntilFixed
+
   }
 }

@@ -11,13 +11,15 @@ object VDom {
   trait VNodeTransform
   case class VNodeInsert(position:Int, node:VNode) extends VNodeTransform
   case class VNodeDelete(position:Int) extends VNodeTransform
+  case class VNodeReorder(permutation:Map[Int, Int]) extends VNodeTransform
 
   case class VNodeTransformTree(transforms:List[VNodeTransform], children:List[VNodeTransformTree])
 
   object typeHints extends TypeHints {
     val classToHint:Map[Class[_], String] = Map(
       classOf[VNodeInsert] -> "insert",
-      classOf[VNodeDelete] -> "delete"
+      classOf[VNodeDelete] -> "delete",
+      classOf[VNodeReorder] -> "reorder"
     )
     val hint2Class:Map[String, Class[_]] = classToHint.map { case (c, h) => h -> c }.toMap
     override val hints: List[Class[_]] = classToHint.keysIterator.toList
@@ -50,7 +52,9 @@ object VDom {
     VNodeTransformTree(transforms, children)
   }
 
-  def areSimilar(a:Node, b:Node):Boolean = false
+  def compare(a:Node, b:Node):Float =
+    if(a == b) 1f
+    else 0f
 
   private def isText(n:Node) = n.label == pcdata
   private def isntWhitespace(n:Node) = !isText(n) || !n.text.trim.isEmpty
