@@ -21,7 +21,9 @@ object UpdateDOMSpec extends Specification with XmlMatchers {
 
   "UpdateDOM Spec".title
 
-  def updateAndCompare(before:Node, after:Node) = {
+  def rtAndCompare(before:Node, after:Node) = roundTrip(before, after) must beEqualToIgnoringSpace(after)
+
+  def roundTrip(before:Node, after:Node):Node = {
     val lift_js = this.getClass.getClassLoader.getResource("toserve/lift.js")
     val jq_js   = this.getClass.getClassLoader.getResource("toserve/jquery-1.4.4.js")
     def html(body:Node) =
@@ -82,7 +84,7 @@ object UpdateDOMSpec extends Specification with XmlMatchers {
 
       exec(js)
 
-      toXml(page.getBody) must beEqualToIgnoringSpace(after)
+      toXml(page.getBody)
     } finally {
       file.delete()
     }
@@ -113,7 +115,7 @@ object UpdateDOMSpec extends Specification with XmlMatchers {
           </div>
         </body>
 
-      updateAndCompare(before, after)
+      rtAndCompare(before, after)
     }
 
     "append two elements" in {
@@ -141,7 +143,7 @@ object UpdateDOMSpec extends Specification with XmlMatchers {
           </div>
         </body>
 
-      updateAndCompare(before, after)
+      rtAndCompare(before, after)
     }
 
     "remove an element" in {
@@ -166,7 +168,7 @@ object UpdateDOMSpec extends Specification with XmlMatchers {
           </div>
         </body>
 
-      updateAndCompare(before, after)
+      rtAndCompare(before, after)
     }.pendingUntilFixed("Not doing removes yet")
   }
 
