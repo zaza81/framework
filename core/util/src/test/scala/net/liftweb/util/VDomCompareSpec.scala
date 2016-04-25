@@ -16,6 +16,12 @@ object VDomCompareSpec extends Specification {
       compare(a, b) must_== 0f
     }
 
+    "regard elements with different tags as dissimilar even if have same id" in {
+      val a = <div id="nope"></div>
+      val b = <span id="nope"></span>
+      compare(a, b) must_== 0f
+    }
+
     "regard elements with the same tags and children as the same" in {
       val a = <span>Some text</span>
       val b = <span>Some text</span>  // Purposefully making a copy for the test
@@ -80,6 +86,12 @@ object VDomCompareSpec extends Specification {
         </ul>
 
       compare(a, b) must_== 0.0f
+    }
+
+    "regard elements with same tags and ids as the same regardless of children" in {
+      val a = <span id="same">Not</span>
+      val b = <span id="same">Different</span>
+      compare(a, b) must_== 1f
     }
   }
 
