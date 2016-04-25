@@ -12,7 +12,7 @@ object VDom {
   trait VNodeTransform
   case class VNodeInsert(position:Int, node:VNode) extends VNodeTransform
   case class VNodeDelete(position:Int) extends VNodeTransform
-  case class VNodeReorder(permutation:Map[Int, Int]) extends VNodeTransform
+  case class VNodeReorder(permutation:Int*) extends VNodeTransform
 
   case class VNodeTransformTree(transforms:List[VNodeTransform], children:List[VNodeTransformTree])
 

@@ -134,7 +134,7 @@ object VDomDiffSpec extends Specification {
           node(
             node(),
             node()
-          ).withTransforms(VNodeReorder(Map(0 -> 3, 1 -> 0, 3 -> 1)))
+          ).withTransforms(VNodeReorder(0, 3, 1))
         )
 
       diff(before, after) must_== expected
