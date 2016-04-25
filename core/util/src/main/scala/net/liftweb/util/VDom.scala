@@ -9,6 +9,7 @@ object VDom {
   import VDomHelpers._
   case class VNode(tag:String, attributes:Map[String, String] = Map(), children:List[VNode] = List(), text:Option[String] = None)
 
+  // TODO: Attribute updates
   trait VNodePatch
   case class VNodeInsert(position:Int, node:VNode) extends VNodePatch
   case class VNodeDelete(position:Int) extends VNodePatch
@@ -54,8 +55,17 @@ object VDom {
   }
 
   def compare(a:Node, b:Node):Float =
-    if(a == b) 1f
-    else 0f
+    if(a eq b) 1f
+    else if(a.label != b.label) 0f
+    else if(a.label == pcdata) if(a.text == b.text) 1f else 0f
+    else { // Compare children
+      val aChildren = a.nonEmptyChildren.filter(isntWhitespace).toList
+      val bChildren = b.nonEmptyChildren.filter(isntWhitespace).toList
+      val sum = aChildren.zip(bChildren).map { case (ac, bc) => compare(ac, bc) }.reduceOption(_ + _)
+      val length = Math.max(aChildren.length, bChildren.length)
+      sum.map(_ / length)
+        .getOrElse(if(length == 0) 1f else 0f) // If there isn't a sum, we're only similar if neither have children
+    }
 
   object VNode {
     def text(t:String):VNode = VNode("#text", Map(), List(), Some(t))
