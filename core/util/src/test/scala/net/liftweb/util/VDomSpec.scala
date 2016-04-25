@@ -127,7 +127,7 @@ object VDomSpec extends Specification with XmlMatchers {
   "VDom.diff" should {
     import VDom.diff
 
-    "find an added element" in {
+    "find an appended element" in {
       val before =
         <div>
           <hr/>
@@ -158,6 +158,38 @@ object VDomSpec extends Specification with XmlMatchers {
 
       diff(before, after) must_== expected
     }
+
+    "find an inserted element" in {
+      val before =
+        <div>
+          <hr/>
+          <ul>
+            <li>Message 1</li>
+            <li>Message 2</li>
+          </ul>
+        </div>
+
+      val after =
+        <div>
+          <hr/>
+          <ul>
+            <li>Message 1</li>
+            <li>Message 3</li>
+            <li>Message 2</li>
+          </ul>
+        </div>
+
+      val expected =
+        node(
+          node(),
+          node(
+            node(),
+            node()
+          ).withTransforms(VNodeInsert(1, VNode("li", Map(), List(txt("Message 3")))))
+        )
+
+      diff(before, after) must_== expected
+    }.pendingUntilFixed
 
     "find an removed element" in {
       val before =
