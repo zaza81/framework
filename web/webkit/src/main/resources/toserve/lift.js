@@ -398,8 +398,8 @@
     }
 
     function updateNode(node, tree) {
-      for(var i=0; i < tree.transforms.length; i++) {
-        var tf = tree.transforms[i];
+      for(var i=0; i < tree.patches.length; i++) {
+        var tf = tree.patches[i];
         switch (tf.type) {
           case "insert": insertNode(node, tf.position, tf.node); break;
         }

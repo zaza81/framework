@@ -11,7 +11,7 @@ object VDomFormatsSpec extends Specification {
 
   implicit val f = formats
 
-  def check(patch:VNodeTransform) = extract[VNodeTransform](decompose(patch)) must_== patch
+  def check(patch:VNodePatch) = extract[VNodePatch](decompose(patch)) must_== patch
 
   "VDom.formats" should {
     "round-trip a typical VNodeInsert" in {

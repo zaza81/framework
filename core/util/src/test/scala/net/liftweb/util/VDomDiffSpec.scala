@@ -38,7 +38,7 @@ object VDomDiffSpec extends Specification {
           node(
             node(),
             node()
-          ).withTransforms(VNodeInsert(2, VNode("li", Map(), List(txt("Message 3")))))
+          ).withPatches(VNodeInsert(2, VNode("li", Map(), List(txt("Message 3")))))
         )
 
       diff(before, after) must_== expected
@@ -70,7 +70,7 @@ object VDomDiffSpec extends Specification {
           node(
             node(),
             node()
-          ).withTransforms(VNodeInsert(1, VNode("li", Map(), List(txt("Message 3")))))
+          ).withPatches(VNodeInsert(1, VNode("li", Map(), List(txt("Message 3")))))
         )
 
       diff(before, after) must_== expected
@@ -99,7 +99,7 @@ object VDomDiffSpec extends Specification {
           node(),
           node(
             node()
-          ).withTransforms(VNodeDelete(0))
+          ).withPatches(VNodeDelete(0))
         )
 
       diff(before, after) must_== expected
@@ -134,7 +134,7 @@ object VDomDiffSpec extends Specification {
           node(
             node(),
             node()
-          ).withTransforms(VNodeReorder(0, 3, 1))
+          ).withPatches(VNodeReorder(0, 3, 1))
         )
 
       diff(before, after) must_== expected

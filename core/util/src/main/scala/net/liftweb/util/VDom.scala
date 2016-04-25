@@ -9,12 +9,12 @@ object VDom {
   import VDomHelpers._
   case class VNode(tag:String, attributes:Map[String, String] = Map(), children:List[VNode] = List(), text:Option[String] = None)
 
-  trait VNodeTransform
-  case class VNodeInsert(position:Int, node:VNode) extends VNodeTransform
-  case class VNodeDelete(position:Int) extends VNodeTransform
-  case class VNodeReorder(permutation:Int*) extends VNodeTransform
+  trait VNodePatch
+  case class VNodeInsert(position:Int, node:VNode) extends VNodePatch
+  case class VNodeDelete(position:Int) extends VNodePatch
+  case class VNodeReorder(permutation:Int*) extends VNodePatch
 
-  case class VNodeTransformTree(transforms:List[VNodeTransform], children:List[VNodeTransformTree])
+  case class VNodePatchTree(patches:List[VNodePatch], children:List[VNodePatchTree])
 
   object typeHints extends TypeHints {
     val classToHint:Map[Class[_], String] = Map(
@@ -33,7 +33,7 @@ object VDom {
     override val typeHintFieldName = "type"
   }
 
-  def diff(a:Node, b:Node):VNodeTransformTree = {
+  def diff(a:Node, b:Node):VNodePatchTree = {
     val aChildren = a.nonEmptyChildren.filter(isntWhitespace).toList
     val bChildren = b.nonEmptyChildren.filter(isntWhitespace).toList
 
@@ -42,15 +42,15 @@ object VDom {
 //    val deletions = aChildren.diff(bChildren)
 //      .map(c => VNodeDelete(aChildren.indexOf(c)))
 
-    val transforms = additions //++ deletions
+    val patches = additions //++ deletions
 
     val children = aChildren.zip(bChildren)
       .collect {
         case (ca, cb) if ca != cb => diff(ca, cb)     // This != check probably would benefit from memoizing
-        case _ => VNodeTransformTree(List(), List())  // No changes for this node, make a placeholder
+        case _ => VNodePatchTree(List(), List())  // No changes for this node, make a placeholder
       }
 
-    VNodeTransformTree(transforms, children)
+    VNodePatchTree(patches, children)
   }
 
   def compare(a:Node, b:Node):Float =
@@ -82,11 +82,11 @@ object VDom {
     def isWhitespace(n:Node)   = isText(n) && n.text.trim.isEmpty
     def isntWhitespace(n:Node) = !isWhitespace(n)
 
-    def node(child:VNodeTransformTree*):VNodeTransformTree = VNodeTransformTree(List(), child.toList)
+    def node(child:VNodePatchTree*):VNodePatchTree = VNodePatchTree(List(), child.toList)
     def text(t:String) = VNode(pcdata, Map(), List(), Some(t))
 
-    implicit class EnhancedVNodeTransformTree(t:VNodeTransformTree) {
-      def withTransforms(transform:VNodeTransform*) = t.copy(transforms = transform.toList)
+    implicit class EnhancedVNodeTransformTree(t:VNodePatchTree) {
+      def withPatches(patches:VNodePatch*) = t.copy(patches = patches.toList)
     }
 
     def nodeCount(n:Node):Int = {
