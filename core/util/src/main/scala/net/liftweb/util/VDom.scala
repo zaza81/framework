@@ -38,14 +38,14 @@ object VDom {
     val aChildren = a.nonEmptyChildren.filter(isntWhitespace).toList
     val bChildren = b.nonEmptyChildren.filter(isntWhitespace).toList
 
-    val additions = bChildren.zipWithIndex.drop(aChildren.length)
-      .map { case (n, i) => VNodeInsert(i, VNode.fromXml(n)) }
-//    val deletions = aChildren.diff(bChildren)
-//      .map(c => VNodeDelete(aChildren.indexOf(c)))
+    val (added, matched) = bChildren.zipWithIndex
+      .partition { case (bc, i) => aChildren.find(ac => compare(ac, bc) > 0f).isEmpty }
 
-    val patches = additions //++ deletions
+    val additions = added.map { case (bc, i) => VNodeInsert(i, VNode.fromXml(bc)) }
 
-    val children = aChildren.zip(bChildren)
+    val patches = additions
+
+    val children = aChildren.zip(matched.map(_._1))
       .collect {
         case (ca, cb) if ca != cb => diff(ca, cb)     // This != check probably would benefit from memoizing
         case _ => VNodePatchTree(List(), List())  // No changes for this node, make a placeholder
@@ -123,6 +123,8 @@ object VDom {
         Elem(prefix, label, attributes, scope, true, children.filter(pred).map(recFilter(_, pred)):_*)
       case _ => n
     }
+
+    def withoutWhitespace(n:Node) = recFilter(n, isntWhitespace)
 
     def insertNode(root:Node, newChild:Node, atIndex:Int, after:Boolean):Node = {
       def rec(parent:Elem, siblingsBefore:List[Node], child:Node, siblingsAfter:List[Node], index:Int):(Node, Int) =

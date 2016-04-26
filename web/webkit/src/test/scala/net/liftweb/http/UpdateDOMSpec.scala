@@ -6,6 +6,7 @@ import com.gargoylesoftware.htmlunit.BrowserVersion._
 import com.gargoylesoftware.htmlunit.WebClient
 import net.liftweb.http.js.JE
 import net.liftweb.json.Extraction
+import net.liftweb.util.VDom.VDomHelpers
 import net.liftweb.util.{VDom, Html5}
 import org.specs2.matcher.XmlMatchers
 import org.specs2.mutable.Specification
@@ -21,7 +22,12 @@ object UpdateDOMSpec extends Specification with XmlMatchers {
 
   "UpdateDOM Spec".title
 
-  def rtAndCompare(before:Node, after:Node) = roundTrip(before, after) must beEqualToIgnoringSpace(after)
+  def rtAndCompare(before:Node, after:Node) = {
+    import VDomHelpers._
+    val result = withoutWhitespace(roundTrip(before, after))
+
+    result must beEqualTo(withoutWhitespace(after))
+  }
 
   def roundTrip(before:Node, after:Node):Node = {
     val lift_js = this.getClass.getClassLoader.getResource("toserve/lift.js")
