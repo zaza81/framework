@@ -91,7 +91,7 @@ class MongoMapField[OwnerType <: BsonRecord[OwnerType], MapValueType](rec: Owner
   def asDBObject: DBObject = {
     val dbo = new BasicDBObject
     value.keys.foreach { k =>
-      dbo.put(k.toString, value.getOrElse(k, ""))
+      dbo.put(k.toString, value.getOrElse(k, "").asInstanceOf[AnyRef])
     }
     dbo
   }

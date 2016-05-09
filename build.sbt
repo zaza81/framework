@@ -1,6 +1,6 @@
 import Dependencies._
 
-organization in ThisBuild          := "net.liftweb"
+organization in ThisBuild          := "com.github.zaza81"
 
 version in ThisBuild               := "3.0-SNAPSHOT"
 
@@ -25,9 +25,10 @@ publishTo in ThisBuild            <<= isSnapshot(if (_) Some(Opts.resolver.sonat
 
 scmInfo in ThisBuild               := Some(ScmInfo(url("https://github.com/lift/framework"), "scm:git:https://github.com/lift/framework.git"))
 
-pomExtra in ThisBuild              :=  Developers.toXml
+//pomExtra in ThisBuild              :=  Developers.toXml
 
-credentials in ThisBuild <+= state map { s => Credentials(BuildPaths.getGlobalSettingsDirectory(s, BuildPaths.getGlobalBase(s)) / ".credentials") }
+//credentials in ThisBuild <+= state map { s => Credentials(BuildPaths.getGlobalSettingsDirectory(s, BuildPaths.getGlobalBase(s)) / ".credentials") }
+
 
 initialize <<= (name, version, scalaVersion) apply printLogo
 
