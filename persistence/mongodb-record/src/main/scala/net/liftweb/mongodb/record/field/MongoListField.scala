@@ -21,33 +21,32 @@ package field
 
 import scala.collection.JavaConversions._
 import scala.xml.NodeSeq
-
 import common.{Box, Empty, Failure, Full}
 import http.SHtml
 import http.js.JE.{JsNull, JsRaw}
 import json._
 import net.liftweb.record.{Field, FieldHelpers, MandatoryTypedField, Record}
 import util.Helpers._
-
 import com.mongodb._
+import org.bson.Document
 import org.bson.types.ObjectId
 import org.joda.time.DateTime
 
 /**
-  * List field.
-  *
-  * Supported types:
-  * primitives - String, Int, Long, Double, Float, Byte, BigInt,
-  * Boolean (and their Java equivalents)
-  * date types - java.util.Date, org.joda.time.DateTime
-  * mongo types - ObjectId, Pattern, UUID
-  *
-  * If you need to support other types, you will need to override the
-  * asDBObject and setFromDBObject functions accordingly. And the
-  * asJValue and setFromJValue functions if you will be using them.
-  *
-  * Note: setting optional_? = false will result in incorrect equals behavior when using setFromJValue
-  */
+ * List field.
+ *
+ * Supported types:
+ * primitives - String, Int, Long, Double, Float, Byte, BigInt,
+ * Boolean (and their Java equivalents)
+ * date types - java.util.Date, org.joda.time.DateTime
+ * mongo types - ObjectId, Pattern, UUID
+ *
+ * If you need to support other types, you will need to override the
+ * asDBObject and setFromDBObject functions accordingly. And the
+ * asJValue and setFromJValue functions if you will be using them.
+ *
+ * Note: setting optional_? = false will result in incorrect equals behavior when using setFromJValue
+ */
 class MongoListField[OwnerType <: BsonRecord[OwnerType], ListType: Manifest](rec: OwnerType)
   extends Field[List[ListType], OwnerType]
   with MandatoryTypedField[List[ListType]]
@@ -68,9 +67,21 @@ class MongoListField[OwnerType <: BsonRecord[OwnerType], ListType: Manifest](rec
   def setFromAny(in: Any): Box[MyType] = {
     in match {
       case dbo: DBObject => setFromDBObject(dbo)
-      case list@c::xs if mf.runtimeClass.isInstance(c) => setBox(Full(list.asInstanceOf[MyType]))
-      case Some(list@c::xs) if mf.runtimeClass.isInstance(c) => setBox(Full(list.asInstanceOf[MyType]))
-      case Full(list@c::xs) if mf.runtimeClass.isInstance(c) => setBox(Full(list.asInstanceOf[MyType]))
+      case list@c::xs if mf.erasure.isInstance(c) =>  setBox(Full(list.asInstanceOf[MyType]))
+      case Some(list@c::xs) if mf.erasure.isInstance(c) => setBox(Full(list.asInstanceOf[MyType]))
+      case Full(list@c::xs) if mf.erasure.isInstance(c) => setBox(Full(list.asInstanceOf[MyType]))
+      case jlist: java.util.List[_] => {
+        if(!jlist.isEmpty) {
+          val elem = jlist.get(0)
+          if(elem.isInstanceOf[org.bson.Document]) {
+            setFromDocumentList(jlist.asInstanceOf[java.util.List[org.bson.Document]])
+          } else {
+            setBox(Full(jlist.toList.asInstanceOf[MyType]))
+          }
+        } else {
+          setBox(Full(Nil))
+        }
+      }
       case s: String => setFromString(s)
       case Some(s: String) => setFromString(s)
       case Full(s: String) => setFromString(s)
@@ -120,7 +131,7 @@ class MongoListField[OwnerType <: BsonRecord[OwnerType], ListType: Manifest](rec
     if (options.length > 0) Full(elem)
     else Empty
 
-  def asJValue: JValue = JArray(value.map(li => li.asInstanceOf[AnyRef] match {
+  def asJValue = JArray(value.map(li => li.asInstanceOf[AnyRef] match {
     case x if primitive_?(x.getClass) => primitive2jvalue(x)
     case x if mongotype_?(x.getClass) => mongotype2jvalue(x)(owner.meta.formats)
     case x if datetype_?(x.getClass) => datetype2jvalue(x)(owner.meta.formats)
@@ -147,13 +158,18 @@ class MongoListField[OwnerType <: BsonRecord[OwnerType], ListType: Manifest](rec
   // set this field's value using a DBObject returned from Mongo.
   def setFromDBObject(dbo: DBObject): Box[MyType] =
     setBox(Full(dbo.asInstanceOf[BasicDBList].toList.asInstanceOf[MyType]))
+
+  def setFromDocumentList(list: java.util.List[Document]): Box[MyType] = {
+    throw new RuntimeException("Warning, , setting Document as field with no converstion, probably not something you want to do")
+  }
+
 }
 
 /*
 * List of JsonObject case classes
 */
 class MongoJsonObjectListField[OwnerType <: BsonRecord[OwnerType], JObjectType <: JsonObject[JObjectType]]
-  (rec: OwnerType, valueMeta: JsonObjectMeta[JObjectType])(implicit mf: Manifest[JObjectType])
+(rec: OwnerType, valueMeta: JsonObjectMeta[JObjectType])(implicit mf: Manifest[JObjectType])
   extends MongoListField[OwnerType, JObjectType](rec: OwnerType) {
 
   override def asDBObject: DBObject = {
@@ -167,7 +183,7 @@ class MongoJsonObjectListField[OwnerType <: BsonRecord[OwnerType], JObjectType <
       valueMeta.create(JObjectParser.serialize(dbo.get(k.toString))(owner.meta.formats).asInstanceOf[JObject])(owner.meta.formats)
     })))
 
-  override def asJValue: JValue = JArray(value.map(_.asJObject()(owner.meta.formats)))
+  override def asJValue = JArray(value.map(_.asJObject()(owner.meta.formats)))
 
   override def setFromJValue(jvalue: JValue) = jvalue match {
     case JNothing|JNull if optional_? => setBox(Empty)
@@ -176,4 +192,5 @@ class MongoJsonObjectListField[OwnerType <: BsonRecord[OwnerType], JObjectType <
     })))
     case other => setBox(FieldHelpers.expectedA("JArray", other))
   }
+
 }

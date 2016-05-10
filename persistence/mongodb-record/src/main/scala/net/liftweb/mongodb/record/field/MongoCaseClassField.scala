@@ -1,5 +1,5 @@
 /*
-* Copyright 2010-2015 WorldWide Conferencing, LLC
+* Copyright 2010-2011 WorldWide Conferencing, LLC
 *
 * Licensed under the Apache License, Version 2.0 (the "License");
 * you may not use this file except in compliance with the License.
@@ -19,15 +19,18 @@ package field
 import net.liftweb.record._
 import net.liftweb.record.RecordHelpers.jvalueToJsExp
 import net.liftweb.record.field._
-import net.liftweb.http.js.JE.{JsObj, Num, Str, JsNull}
-import xml.{Text, NodeSeq}
+import net.liftweb.http.js.JE.{JsNull, JsObj, Num, Str}
+
+import xml.{NodeSeq, Text}
 import net.liftweb.mongodb.JObjectParser
 import com.mongodb.{BasicDBList, DBObject}
-import net.liftweb.common.{Failure, Empty, Full, Box}
+import net.liftweb.common.{Box, Empty, Failure, Full}
 import net.liftweb.util.Helpers
 import net.liftweb.json._
+
 import reflect.Manifest
 import net.liftweb.http.js.JsExp
+import org.bson.Document
 
 
 class MongoCaseClassField[OwnerType <: Record[OwnerType],CaseType](rec: OwnerType)( implicit mf: Manifest[CaseType]) extends Field[CaseType, OwnerType] with MandatoryTypedField[CaseType] with MongoFieldFlavor[CaseType] {
@@ -47,7 +50,7 @@ class MongoCaseClassField[OwnerType <: Record[OwnerType],CaseType](rec: OwnerTyp
   override def defaultValue = null.asInstanceOf[MyType]
   override def optional_? = true
 
-  def asJValue: JValue = valueBox.map(v => Extraction.decompose(v)) openOr (JNothing: JValue)
+  def asJValue = valueBox.map(v => Extraction.decompose(v)) openOr (JNothing: JValue)
 
   def setFromJValue(jvalue: JValue): Box[CaseType] = jvalue match {
     case JNothing|JNull => setBox(Empty)
@@ -63,18 +66,21 @@ class MongoCaseClassField[OwnerType <: Record[OwnerType],CaseType](rec: OwnerTyp
     setFromJValue(jvalue)
   }
 
+
+
   override def setFromString(in: String): Box[CaseType] = {
     Helpers.tryo{ JsonParser.parse(in).extract[CaseType] }
   }
 
   def setFromAny(in: Any): Box[CaseType] = in match {
     case dbo: DBObject => setFromDBObject(dbo)
-    case c if mf.runtimeClass.isInstance(c) => setBox(Full(c.asInstanceOf[CaseType]))
-    case Full(c) if mf.runtimeClass.isInstance(c) => setBox(Full(c.asInstanceOf[CaseType]))
+    case c if mf.erasure.isInstance(c) => setBox(Full(c.asInstanceOf[CaseType]))
+    case Full(c) if mf.erasure.isInstance(c) => setBox(Full(c.asInstanceOf[CaseType]))
     case null|None|Empty     => setBox(defaultValueBox)
     case (failure: Failure)  => setBox(failure)
     case _ => setBox(defaultValueBox)
   }
+
 }
 
 class MongoCaseClassListField[OwnerType <: Record[OwnerType],CaseType](rec: OwnerType)( implicit mf: Manifest[CaseType]) extends Field[List[CaseType], OwnerType] with MandatoryTypedField[List[CaseType]] with MongoFieldFlavor[List[CaseType]] {
@@ -94,7 +100,7 @@ class MongoCaseClassListField[OwnerType <: Record[OwnerType],CaseType](rec: Owne
   override def defaultValue: MyType = Nil
   override def optional_? = true
 
-  def asJValue: JValue = JArray(value.map(v => Extraction.decompose(v)))
+  def asJValue = JArray(value.map(v => Extraction.decompose(v)))
 
   def setFromJValue(jvalue: JValue): Box[MyType] = jvalue match {
     case JArray(contents) => setBox(Full(contents.flatMap(s => Helpers.tryo[CaseType]{ s.extract[CaseType] })))
@@ -107,7 +113,6 @@ class MongoCaseClassListField[OwnerType <: Record[OwnerType],CaseType](rec: Owne
     asJValue match {
       case JArray(list) =>
         list.foreach(v => dbl.add(JObjectParser.parse(v.asInstanceOf[JObject])))
-      case _ =>
     }
 
     dbl
@@ -120,12 +125,12 @@ class MongoCaseClassListField[OwnerType <: Record[OwnerType],CaseType](rec: Owne
 
   def setFromAny(in: Any): Box[MyType] = in match {
     case dbo: DBObject => setFromDBObject(dbo)
-    case list@c::xs if mf.runtimeClass.isInstance(c) =>  setBox(Full(list.asInstanceOf[MyType]))
+    case list@c::xs if mf.erasure.isInstance(c) =>  setBox(Full(list.asInstanceOf[MyType]))
     case _ => setBox(Empty)
   }
 
   override def setFromString(in: String): Box[MyType] = {
     setFromJValue(JsonParser.parse(in))
   }
-}
 
+}

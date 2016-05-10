@@ -21,6 +21,8 @@ package record
 import common._
 
 import java.util.regex.Pattern
+import org.bson.Document
+
 import scala.collection.JavaConversions._
 
 import net.liftweb.record.{Field, MetaRecord, Record}
@@ -39,7 +41,13 @@ trait BsonRecord[MyType <: BsonRecord[MyType]] extends Record[MyType] {
   /**
     * Encode a record instance into a DBObject
     */
+
   def asDBObject: DBObject = meta.asDBObject(this)
+  def asDocument: Document = meta.asDocument(this)
+
+
+
+
 
   /**
     * Set the fields of this record from the given DBObject
@@ -66,6 +74,9 @@ trait BsonRecord[MyType <: BsonRecord[MyType]] extends Record[MyType] {
       case _ => false
     }
   }
+
+
+
 }
 
 /** Specialized MetaRecord that deals with BsonRecords */
@@ -86,6 +97,18 @@ trait BsonMetaRecord[BaseRecord <: BsonRecord[BaseRecord]] extends MetaRecord[Ba
     } { dbo.add(field.name, dbValue) }
 
     dbo.get
+  }
+
+  def asDocument (inst: BaseRecord): Document = {
+
+    val dbo = new Document()
+    for {
+      field <- fields(inst)
+      dbValue <- fieldDbValue(field)
+
+    }{dbo.append(field.name, dbValue)}
+
+    dbo
   }
 
   /**
@@ -147,4 +170,19 @@ trait BsonMetaRecord[BaseRecord <: BsonRecord[BaseRecord]] extends MetaRecord[Ba
       inst.fields.foreach(_.resetDirty)
     }
   }
+
+    def setFieldsFromDocument(inst: BaseRecord, doc: Document): Unit = {
+       for (k <- doc.keySet; field <- inst.fieldByName(k.toString)) {
+            field.setFromAny(doc.get(k.toString))
+          }
+        inst.runSafe {
+            inst.fields.foreach(_.resetDirty)
+          }
+      }
+
+      def fromDocument(doc: Document): BaseRecord = {
+        val inst: BaseRecord = createRecord
+        setFieldsFromDocument(inst, doc)
+       inst
+      }
 }

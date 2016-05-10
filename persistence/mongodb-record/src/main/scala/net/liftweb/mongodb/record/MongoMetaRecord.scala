@@ -37,6 +37,9 @@ import com.mongodb._
 import com.mongodb.util.JSON
 import org.bson.types.ObjectId
 
+import org.bson.Document
+import scala.concurrent.Future
+
 trait MongoMetaRecord[BaseRecord <: MongoRecord[BaseRecord]]
   extends BsonMetaRecord[BaseRecord] with MongoMeta[BaseRecord] {
 
@@ -64,6 +67,11 @@ trait MongoMetaRecord[BaseRecord <: MongoRecord[BaseRecord]]
    * Use the db associated with this Meta.
    */
   def useDb[T](f: DB => T): T = MongoDB.use(connectionIdentifier)(f)
+
+  def useCollAsync[T](f: com.mongodb.async.client.MongoCollection[Document] => T): T = {
+        MongoAsync.useCollection[T](connectionIdentifier, collectionName)(f)
+      }
+
 
   /**
   * Delete the instance from backing store
@@ -266,6 +274,19 @@ trait MongoMetaRecord[BaseRecord <: MongoRecord[BaseRecord]]
   /**
   * Save the instance in the appropriate backing store
   */
+  def insertAsync(inst:BaseRecord): Future[Boolean] = {
+        useCollAsync { coll =>
+            val cb = new SingleBooleanVoidCallback( () => {
+                foreachCallback(inst, _.afterSave)
+                inst.allFields.foreach { _.resetDirty }
+              })
+            foreachCallback(inst, _.beforeSave)
+            coll.insertOne(inst.asDocument, cb)
+            cb.future
+          }
+      }
+
+
   def save(inst: BaseRecord, concern: WriteConcern): Boolean = saveOp(inst) {
     useColl { coll =>
       coll.save(inst.asDBObject, concern)

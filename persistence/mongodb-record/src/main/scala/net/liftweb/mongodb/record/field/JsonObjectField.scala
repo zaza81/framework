@@ -25,6 +25,7 @@ import net.liftweb.json.JsonAST._
 import net.liftweb.json.{JsonParser, Printer}
 import net.liftweb.record.{Field, FieldHelpers, MandatoryTypedField, Record}
 import net.liftweb.util.Helpers.tryo
+import org.bson.Document
 
 import com.mongodb.DBObject
 

@@ -20,11 +20,13 @@ package record
 
 import net.liftweb.record.{MetaRecord, Record}
 import net.liftweb.util.Helpers.tryo
+import org.bson.Document
 
 import com.mongodb.{BasicDBObject, DBObject, DBRef, WriteConcern}
 
 import org.bson.types.ObjectId
 import common.{Full, Box}
+import scala.concurrent.Future
 
 trait MongoRecord[MyType <: MongoRecord[MyType]] extends BsonRecord[MyType] {
   self: MyType =>
@@ -113,4 +115,13 @@ trait MongoRecord[MyType <: MongoRecord[MyType]] extends BsonRecord[MyType] {
       meta.delete_!(this)
     }
   }
+
+
+  def insertAsync():Future[Boolean] = {
+        runSafe {
+            meta.insertAsync(this)
+          }
+      }
+
+
 }

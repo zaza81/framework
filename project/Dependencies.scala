@@ -24,6 +24,13 @@ object Dependencies {
   type ModuleMap = String => ModuleID
 
   lazy val CVMappingAll  = crossMapped("2.11.7" -> "2.11")
+  lazy val CVMappingScalaz = crossMapped("2.11.7" ->"2.11")
+
+
+  lazy val scalazGroup        = defaultOrMapped("org.scalaz")
+  lazy val scalaz7Version     = defaultOrMapped("7.0.6")
+  lazy val specs2Version      = defaultOrMapped("2.3.11")
+  lazy val scalatestVersion   = defaultOrMapped("2.1.3")
 
   lazy val slf4jVersion = "1.7.2"
 
@@ -36,12 +43,13 @@ object Dependencies {
   lazy val joda_time              = "joda-time"                  % "joda-time"          % "2.9.2"
   lazy val joda_convert           = "org.joda"                   % "joda-convert"       % "1.8.1"
   lazy val htmlparser             = "nu.validator.htmlparser"    % "htmlparser"         % "1.4"
-  lazy val mongo_java_driver      = "org.mongodb"                % "mongo-java-driver"  % "3.2.0"
+  lazy val mongo_java_driver      = "org.mongodb"                % "mongo-java-driver"  % "3.2.2"
+  lazy val mongo_async_driver     = "org.mongodb"                % "mongodb-driver-async"  % "3.2.2"
   lazy val paranamer              = "com.thoughtworks.paranamer" % "paranamer"          % "2.8"
   lazy val scalajpa               = "org.scala-libs"             % "scalajpa"           % "1.5"     cross CVMappingAll
   lazy val scalap: ModuleMap      = "org.scala-lang"             % "scalap"             % _
   lazy val scala_compiler: ModuleMap = "org.scala-lang"          % "scala-compiler"     % _
-  lazy val scalaz7_core           = "org.scalaz"                 % "scalaz-core"        % "7.2.0"   cross CVMappingAll
+  lazy val scalaz7_core: ModuleMap = sv => scalazGroup(sv)       % "scalaz-core"        % scalaz7Version(sv) cross CVMappingScalaz
   lazy val squeryl                = "org.squeryl"                % "squeryl"            % "0.9.5-7" cross CVMappingAll
   lazy val slf4j_api              = "org.slf4j"                  % "slf4j-api"          % slf4jVersion
   lazy val scala_xml              = "org.scala-lang.modules"     %% "scala-xml"         % "1.0.5"

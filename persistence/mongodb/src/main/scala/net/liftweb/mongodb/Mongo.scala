@@ -26,41 +26,45 @@ import scala.collection.immutable.HashSet
 import com.mongodb.{DB, DBCollection, Mongo, MongoClient, MongoException, MongoOptions, ServerAddress}
 
 /**
-  * Main Mongo object
-  */
+ * Main Mongo object
+ */
 object MongoDB {
 
   /**
-    * HashMap of Mongo instance and db name tuples, keyed by ConnectionIdentifier
-    */
+   * HashMap of Mongo instance and db name tuples, keyed by ConnectionIdentifier
+   */
   private val dbs = new ConcurrentHashMap[ConnectionIdentifier, (Mongo, String)]
 
   /**
-    * Define a MongoClient db using a MongoClient instance.
-    */
+   * Define a MongoClient db using a MongoClient instance.
+   */
   def defineDb(name: ConnectionIdentifier, mngo: MongoClient, dbName: String) {
     dbs.put(name, (mngo, dbName))
   }
 
   /**
-    * Get a DB reference
-    */
+   * Define and authenticate a Mongo db using a MongoClient instance.
+   */
+
+  /**
+   * Get a DB reference
+   */
   def getDb(name: ConnectionIdentifier): Option[DB] = dbs.get(name) match {
     case null => None
     case (mngo, db) => Some(mngo.getDB(db))
   }
 
   /**
-    * Get a Mongo collection. Gets a Mongo db first.
-    */
+   * Get a Mongo collection. Gets a Mongo db first.
+   */
   private def getCollection(name: ConnectionIdentifier, collectionName: String): Option[DBCollection] = getDb(name) match {
     case Some(mongo) if mongo != null => Some(mongo.getCollection(collectionName))
     case _ => None
   }
 
   /**
-    * Executes function {@code f} with the mongo db named {@code name}.
-    */
+   * Executes function {@code f} with the mongo db named {@code name}.
+   */
   def use[T](name: ConnectionIdentifier)(f: (DB) => T): T = {
 
     val db = getDb(name) match {
@@ -72,9 +76,9 @@ object MongoDB {
   }
 
   /**
-    * Executes function {@code f} with the mongo named {@code name}.
-    * Uses the default ConnectionIdentifier
-    */
+   * Executes function {@code f} with the mongo named {@code name}.
+   * Uses the default ConnectionIdentifier
+   */
   def use[T](f: (DB) => T): T = {
 
     val db = getDb(DefaultConnectionIdentifier) match {
@@ -86,9 +90,9 @@ object MongoDB {
   }
 
   /**
-    * Executes function {@code f} with the mongo named {@code name} and
-    * collection names {@code collectionName}. Gets a collection for you.
-    */
+   * Executes function {@code f} with the mongo named {@code name} and
+   * collection names {@code collectionName}. Gets a collection for you.
+   */
   def useCollection[T](name: ConnectionIdentifier, collectionName: String)(f: (DBCollection) => T): T = {
     val coll = getCollection(name, collectionName) match {
       case Some(collection) => collection
@@ -99,8 +103,8 @@ object MongoDB {
   }
 
   /**
-    * Same as above except uses DefaultConnectionIdentifier
-    */
+   * Same as above except uses DefaultConnectionIdentifier
+   */
   def useCollection[T](collectionName: String)(f: (DBCollection) => T): T = {
     val coll = getCollection(DefaultConnectionIdentifier, collectionName) match {
       case Some(collection) => collection
@@ -111,15 +115,21 @@ object MongoDB {
   }
 
   /**
-    * Executes function {@code f} with the mongo db named {@code name}. Uses the same socket
-    * for the entire function block. Allows multiple operations on the same thread/socket connection
-    * and the use of getLastError.
-    * See: http://docs.mongodb.org/ecosystem/drivers/java-concurrency/
-    */
+   * Executes function {@code f} with the mongo db named {@code name}. Uses the same socket
+   * for the entire function block. Allows multiple operations on the same thread/socket connection
+   * and the use of getLastError.
+   * See: http://docs.mongodb.org/ecosystem/drivers/java-concurrency/
+   */
+
 
   /**
-    * Calls close on each MongoClient instance and clears the HashMap.
-    */
+   * Same as above except uses DefaultConnectionIdentifier
+   */
+
+
+  /**
+   * Calls close on each MongoClient instance and clears the HashMap.
+   */
   def closeAll(): Unit = {
     import scala.collection.JavaConversions._
     dbs.values.foreach { case (mngo, _) =>

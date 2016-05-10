@@ -99,7 +99,7 @@ object BuildDef extends Build {
     coreProject("json-scalaz7")
         .dependsOn(json)
         .settings(description := "JSON Library based on Scalaz 7",
-                  libraryDependencies ++= Seq(scalaz7))
+          libraryDependencies <+= scalaVersion(scalaz7))
 
   lazy val json_ext =
     coreProject("json-ext")
@@ -197,7 +197,7 @@ object BuildDef extends Build {
     persistenceProject("mongodb")
         .dependsOn(json_ext, util)
         .settings(parallelExecution in Test := false,
-                  libraryDependencies += mongo_driver,
+                  libraryDependencies ++= Seq(mongo_driver, mongo_async_driver),
                   initialize in Test <<= (resourceDirectory in Test) { rd =>
                     System.setProperty("java.util.logging.config.file", (rd / "logging.properties").absolutePath)
                   })

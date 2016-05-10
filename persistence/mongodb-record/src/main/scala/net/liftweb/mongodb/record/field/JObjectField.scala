@@ -24,6 +24,7 @@ import http.js.JE._
 import json._
 import util.Helpers.tryo
 import net.liftweb.record.{Field, FieldHelpers, MandatoryTypedField}
+import org.bson.Document
 
 import scala.xml.NodeSeq
 
@@ -48,6 +49,7 @@ with MongoFieldFlavor[JObject] {
 
   def setFromAny(in: Any): Box[JObject] = in match {
     case dbo: DBObject => setBox(setFromDBObject(dbo))
+    case doc: Document => setBox(setFromDocument(doc))
     case jv: JObject => setBox(Full(jv))
     case Some(jv: JObject) => setBox(Full(jv))
     case Full(jv: JObject) => setBox(Full(jv))
@@ -73,4 +75,7 @@ with MongoFieldFlavor[JObject] {
 
   def setFromDBObject(obj: DBObject): Box[JObject] =
     Full(JObjectParser.serialize(obj)(owner.meta.formats).asInstanceOf[JObject])
+
+  def setFromDocument(obj: Document): Box[JObject] =
+        Full(JObjectParser.serialize(obj)(owner.meta.formats).asInstanceOf[JObject])
 }

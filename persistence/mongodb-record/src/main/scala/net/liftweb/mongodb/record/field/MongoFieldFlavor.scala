@@ -25,6 +25,7 @@ import net.liftweb.json.Printer
 import net.liftweb.json.JsonAST._
 
 import com.mongodb.DBObject
+import org.bson.Document
 
 /**
 * Describes common aspects related to Mongo fields
